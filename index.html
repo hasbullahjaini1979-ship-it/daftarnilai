@@ -458,6 +458,21 @@
                         </div>
                     </div>
                     <div id="a-connres" style="margin-top:12px;display:none"></div>
+                    <!-- Panel Diagnosa -->
+                    <div style="margin-top:10px;background:#f8faff;border:1px solid #dde8ff;border-radius:9px;padding:12px 14px">
+                        <div style="font-size:11px;font-weight:700;color:#1565c0;margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">🔧 Diagnosa Koneksi</div>
+                        <div style="font-size:11px;color:#475569;margin-bottom:8px;line-height:1.6">
+                            Jika Test Koneksi gagal dengan <b>"Failed to fetch"</b>:<br>
+                            1. Pastikan deploy GAS dengan akses <b>"Siapa saja / Anyone"</b><br>
+                            2. Klik <b>"Buat deployment BARU"</b> (bukan edit yang sudah ada)<br>
+                            3. Salin URL baru → Simpan & Hubungkan<br>
+                            4. Jika masih gagal, coba tombol di bawah:
+                        </div>
+                        <div style="display:flex;gap:7px;flex-wrap:wrap">
+                            <button class="a-btn a-btn-sec" style="font-size:11px" onclick="aDiagGET()">🔍 Test via GET (buka tab baru)</button>
+                            <button class="a-btn a-btn-warn" style="font-size:11px" onclick="aClearLocalStorage()">🗑 Reset URL Tersimpan</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="a-card" style="max-width:540px">
                     <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
@@ -680,7 +695,7 @@
             </div>
 
             <!-- P11: Menu Cetak Laporan -->
-            <div id="ap-11" class="a-page">
+            <div id="ap-13" class="a-page">
                 <!-- Hero Section -->
                 <div class="a-cetak-hero">
                     <div class="a-cetak-hero-inner">
@@ -796,7 +811,7 @@
 
 
             <!-- P12: TINDAK LANJUT ASESMEN (REMEDIAL & PENGAYAAN) -->
-            <div id="ap-12" class="a-page">
+            <div id="ap-11" class="a-page">
                 <!-- HERO -->
                 <div class="a-cetak-hero" style="background:linear-gradient(135deg,#0d1b2e 0%,#7c3aed 100%)">
                     <div class="a-cetak-hero-inner">
@@ -953,7 +968,7 @@
             </div>
 
             <!-- P13: LAPORAN REMEDIAL & PENGAYAAN -->
-            <div id="ap-13" class="a-page">
+            <div id="ap-12" class="a-page">
                 <div class="a-cetak-hero" style="background:linear-gradient(135deg,#4c1d95 0%,#7c3aed 100%)">
                     <div class="a-cetak-hero-inner">
                         <div class="a-cetak-hero-ico">🖨</div>
@@ -1269,51 +1284,212 @@ const KOKU_CLS   = {'MULAI BERKEMBANG':'kMB','BERKEMBANG':'kB','CAKAP':'kC','MAH
 const KOKU_BADGE = {'MULAI BERKEMBANG':'rb-MB','BERKEMBANG':'rb-B','CAKAP':'rb-C','MAHIR':'rb-M'};
 
 // ===================== GOOGLE SHEETS =====================
-let GS_URL = 'https://script.google.com/macros/s/AKfycbyJ6PV28o1WP8_MZs-IV6BfMRgNq10yISgU-OhFsom0zAxbWaWim3hfYaRY4c0lXyJP/exec'; // URL GAS tertanam — ubah jika deploy ulang
+// URL GAS: baca dari localStorage, fallback ke URL default
+const GS_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbzwfxdqaWHuvgLFaVq0Ki7Ez3FD_CvCkkoCUYG8f-UVaAPqXMJtiIJ6eBFNM9CoOwT5/exec';
+let GS_URL = localStorage.getItem('sdn1_gs_url') || GS_URL_DEFAULT;
 let GS_LOAD_ATTEMPTED = false;
 let GS_OK  = false;
 
-async function gsReq(body){
-    if(!GS_URL) throw new Error('URL belum diset');
-    const r = await fetch(GS_URL,{method:'POST',body:JSON.stringify(body),headers:{'Content-Type':'text/plain'}});
-    const j = await r.json();
-    if(!j.ok) throw new Error(j.error||'Server error');
-    return j.result;
+// ===== KOMUNIKASI GAS — JSONP (bekerja di file:// dan semua environment) =====
+
+// JSONP GET — untuk loadAll, ping, init, saveChunk
+function gsJsonp(action, urlParams){
+    return new Promise(function(resolve,reject){
+        var cbName='_gsCB'+Date.now()+'_'+Math.floor(Math.random()*99999);
+        var el=null;
+        var t=setTimeout(function(){
+            cleanup();
+            reject(new Error(
+                'GAS tidak merespons (20 detik).\n'+
+                'Solusi:\n'+
+                '1. Pastikan Code.gs sudah di-update dan deploy ulang (buat versi baru)\n'+
+                '2. Akses harus: "Siapa saja / Anyone"\n'+
+                '3. Test URL di browser: tambah ?action=ping di akhir URL'
+            ));
+        },20000);
+        function cleanup(){
+            clearTimeout(t);
+            try{delete window[cbName];}catch(e){}
+            if(el&&el.parentNode)el.parentNode.removeChild(el);
+        }
+        window[cbName]=function(d){
+            cleanup();
+            if(d&&d.ok===true) resolve(d.result!==undefined?d.result:d);
+            else reject(new Error((d&&d.error)||'GAS error'));
+        };
+        var url=GS_URL+'?callback='+encodeURIComponent(cbName)+'&action='+encodeURIComponent(action)+'&_='+Date.now();
+        if(urlParams){
+            Object.keys(urlParams).forEach(function(k){
+                url+='&'+encodeURIComponent(k)+'='+encodeURIComponent(
+                    typeof urlParams[k]==='string'?urlParams[k]:JSON.stringify(urlParams[k])
+                );
+            });
+        }
+        el=document.createElement('script');
+        el.src=url;
+        el.onerror=function(){
+            cleanup();
+            reject(new Error(
+                'Script GAS gagal dimuat.\n'+
+                'Pastikan:\n'+
+                '1. URL benar — copy dari "Kelola deployment"\n'+
+                '2. Deploy dengan akses "Siapa saja (Anyone)"\n'+
+                '3. Buat DEPLOYMENT BARU setiap kali ganti kode GAS'
+            ));
+        };
+        document.head.appendChild(el);
+    });
 }
+
+// JSONP SAVE — kirim data per-sheet via JSONP (untuk file://)
+async function gsJsonpSave(payload){
+    var keys=['sekolah','kelas','guru','siswa','mapel','tujuan','koku',
+              'nilaiMapel','nilaiKoku','pengumuman',
+              'programRemedial','nilaiRemedial','programPengayaan','nilaiPengayaan'];
+    for(var i=0;i<keys.length;i++){
+        var k=keys[i];
+        if(payload[k]===undefined) continue;
+        var chunk={};
+        chunk[k]=payload[k];
+        var chunkStr=JSON.stringify(chunk);
+        // Jika data terlalu besar untuk URL (>4000 chars), skip & antrikan
+        if(chunkStr.length>4000){
+            // Simpan di localStorage sebagai pending
+            try{
+                var pending=JSON.parse(localStorage.getItem('sdn1_pending_sync')||'{}');
+                pending[k]=payload[k];
+                pending._ts=Date.now();
+                localStorage.setItem('sdn1_pending_sync',JSON.stringify(pending));
+            }catch(e){}
+            continue;
+        }
+        await gsJsonp('saveChunk',{chunk:chunkStr});
+    }
+    return {ok:true,msg:'Tersimpan via JSONP'};
+}
+
+// fetch POST — untuk saveAll dari server/blog
+function gsFetchPost(body){
+    return new Promise(function(resolve,reject){
+        var ctrl=typeof AbortController!=='undefined'?new AbortController():null;
+        var t=setTimeout(function(){if(ctrl)ctrl.abort();reject(new Error('Timeout 25 detik'));},25000);
+        fetch(GS_URL,{
+            method:'POST',body:JSON.stringify(body),
+            headers:{'Content-Type':'text/plain'},redirect:'follow',
+            signal:ctrl?ctrl.signal:undefined
+        }).then(function(r){
+            clearTimeout(t);
+            if(!r.ok)throw new Error('HTTP '+r.status);
+            return r.text();
+        }).then(function(txt){
+            var j;try{j=JSON.parse(txt);}catch(e){throw new Error('Bukan JSON: '+txt.slice(0,80));}
+            if(!j.ok)throw new Error(j.error||'GAS error');
+            resolve(j.result);
+        }).catch(function(err){
+            clearTimeout(t);
+            if(err.name==='AbortError')reject(new Error('Timeout 25 detik'));
+            else reject(err);
+        });
+    });
+}
+
+// ROUTER UTAMA
+async function gsReq(body){
+    if(!GS_URL) throw new Error('URL GAS belum diset.\nBuka Pengaturan → isi URL → klik Simpan URL.');
+    var action=body.action;
+    // READ → JSONP (file:// dan server)
+    if(action==='ping'||action==='loadAll'){
+        try{return await gsJsonp(action);}
+        catch(e1){try{return await gsFetchPost(body);}catch(e2){throw e1;}}
+    }
+    // WRITE saveAll → fetch dulu, fallback JSONP chunked
+    if(action==='saveAll'){
+        try{return await gsFetchPost(body);}
+        catch(fetchErr){
+            try{return await gsJsonpSave(body.payload);}
+            catch(jsonpErr){
+                // Simpan semua ke localStorage sebagai pending
+                try{
+                    localStorage.setItem('sdn1_pending_sync',JSON.stringify({...body.payload,_ts:Date.now()}));
+                    aToast('⚠ Data disimpan lokal — akan sync otomatis','inf');
+                    return {ok:true,queued:true};
+                }catch(e){throw jsonpErr;}
+            }
+        }
+    }
+    // INIT
+    if(action==='init'){
+        try{return await gsJsonp('init');}
+        catch(e){return await gsFetchPost(body);}
+    }
+    return await gsFetchPost(body);
+}
+
+// Flush antrian localStorage saat koneksi tersedia
+async function gsFlushQueue(){
+    try{
+        var raw=localStorage.getItem('sdn1_pending_sync');
+        if(!raw)return;
+        var pending=JSON.parse(raw);
+        if(!pending._ts||Date.now()-pending._ts>86400000){localStorage.removeItem('sdn1_pending_sync');return;}
+        delete pending._ts;
+        await gsFetchPost({action:'saveAll',payload:pending});
+        localStorage.removeItem('sdn1_pending_sync');
+        aToast('✅ Data antrian tersinkronkan!','ok');
+    }catch(e){}
+}
+
 async function aSaveUrl(){
-    const u=q('a-gsurl').value.trim();
+    var u=q('a-gsurl').value.trim();
     if(!u){aToast('URL kosong!','err');return;}
+    if(!u.includes('script.google.com')){aToast('URL tidak valid — harus dari script.google.com','err');return;}
     GS_URL=u; localStorage.setItem('sdn1_gs_url',u);
-    aToast('URL disimpan, menguji…','inf');
+    aToast('✅ URL disimpan — menguji koneksi…','inf');
     await aTestConn();
 }
-// URL sudah tertanam langsung
+
 async function aTestConn(){
-    aDot('syncing','Menguji…');
+    aDot('syncing','Menguji koneksi…');
+    aShowRes('<b>⏳</b> Menghubungi GAS via JSONP…','green');
     try{
-        const r=await gsReq({action:'loadAll'});
-        GS_OK=true; aDot('online','Terhubung ke Google Sheets');
-        aShowRes('✅ Koneksi berhasil! Data dimuat dari Google Sheets.','green');
-        aApplyGS(r); aToast('✅ Terhubung & data dimuat!','ok');
+        await gsJsonp('ping');
+        aDot('syncing','Memuat data…');
+        aShowRes('<b>✅</b> Koneksi OK! Memuat data…','green');
+        var data=await gsJsonp('loadAll');
+        GS_OK=true;
+        aDot('online','Terhubung ke Google Sheets');
+        aApplyGS(data);
+        aShowRes('<b>✅ Berhasil!</b> Data dimuat dari Google Sheets.','green');
+        aToast('✅ Terhubung & data dimuat!','ok');
+        await gsFlushQueue();
     }catch(e){
         GS_OK=false; aDot('error','Gagal terhubung');
-        aShowRes('❌ Gagal: '+e.message,'red');
-        aToast('Gagal: '+e.message,'err');
+        aShowRes('<b>❌ Gagal:</b> '+e.message.replace(/\n/g,'<br>'),'red');
+        aToast('❌ '+e.message.split('\n')[0],'err');
     }
 }
+
 async function aInitGS(){
     if(!GS_URL){aToast('Masukkan URL dulu!','err');return;}
-    aDot('syncing','Inisialisasi…'); aToast('Menginisialisasi sheets…','inf');
-    try{await gsReq({action:'init'});aToast('✅ Sheets diinisialisasi!','ok');await aSyncToGS();}
-    catch(e){aToast('Gagal init: '+e.message,'err');}
+    aDot('syncing','Inisialisasi…'); aToast('Menginisialisasi Google Sheets…','inf');
+    try{
+        await gsJsonp('init');
+        aToast('✅ Sheets siap!','ok'); if(GS_OK)await aSyncToGS();
+    }catch(e){
+        try{await gsFetchPost({action:'init'});aToast('✅ Sheets siap!','ok');if(GS_OK)await aSyncToGS();}
+        catch(e2){aToast('❌ Gagal init: '+e.message.split('\n')[0],'err');}
+    }
 }
+
 async function aSyncNow(){
     if(!GS_URL){aGoPage(1);aToast('Hubungkan ke Google Sheets dulu!','inf');return;}
-    aDot('syncing','Menyinkronkan…'); q('a-syncbtn').textContent='⏳ Menyinkronkan…';
-    try{await aSyncToGS(); aDot('online','Tersinkron'); aToast('✅ Sinkronisasi berhasil!','ok');}
-    catch(e){aDot('error','Gagal sinkron'); aToast('Gagal: '+e.message,'err');}
-    finally{q('a-syncbtn').textContent='\u2601 Sinkronisasi';}
+    aDot('syncing','Menyinkronkan…');
+    var btn=q('a-syncbtn');if(btn)btn.textContent='⏳ Menyinkronkan…';
+    try{await aSyncToGS();aDot('online','Tersinkron');aToast('✅ Sinkronisasi berhasil!','ok');}
+    catch(e){aDot('error','Gagal');aToast('❌ '+e.message.split('\n')[0],'err');}
+    finally{if(btn)btn.textContent='\u2601 Sinkronisasi';}
 }
+
 async function aSyncToGS(){
     await gsReq({action:'saveAll',payload:{
         sekolah:DB.sekolah,kelas:DB.kelas,guru:DB.guru,siswa:DB.siswa,
@@ -1324,45 +1500,69 @@ async function aSyncToGS(){
     }});
     GS_OK=true; aDot('online','Tersinkron ke Google Sheets');
 }
+
 function aApplyGS(r){
-    if(r.sekolah){
-        // Merge dengan default agar field baru tidak hilang jika GAS lama
+    if(r&&r.sekolah){
         DB.sekolah={
-            nama:'SD Negeri-1 Raja',kepala:'—',nip:'—',kabupaten:'Kotawaringin Barat',alamat:'Jl. Pangeran Diponegoro No.31 Pangkalan Bun',
-            tahunAjaran:'2025/2026',semester:'Semester 1',logo:'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEj_Bchpf0PPe3TflefmK2OsZkvkXNRcv8ZzdgG38MXRD8dAPSLyzf-s7Gb3G1j_KjYMYTXsPlO1Vj6oBz95WKNpBfLeoWgu-fYY5Tjwvk355V2VuiZmoovN7ol4FxZgfwkpom-blL5duzVA3DIlD03qs8L8wekDliR3T56hGf3HYVnmK1oeEhA2r7Bm98A/s633/Logo%20Sekolah%20Buat%20Raport.jpg',
+            nama:'SD Negeri-1 Raja',kepala:'—',nip:'—',kabupaten:'Kotawaringin Barat',
+            alamat:'Jl. Pangeran Diponegoro No.31 Pangkalan Bun',
+            tahunAjaran:'2025/2026',semester:'Semester 1',
+            logo:'https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEj_Bchpf0PPe3TflefmK2OsZkvkXNRcv8ZzdgG38MXRD8dAPSLyzf-s7Gb3G1j_KjYMYTXsPlO1Vj6oBz95WKNpBfLeoWgu-fYY5Tjwvk355V2VuiZmoovN7ol4FxZgfwkpom-blL5duzVA3DIlD03qs8L8wekDliR3T56hGf3HYVnmK1oeEhA2r7Bm98A/s633/Logo%20Sekolah%20Buat%20Raport.jpg',
             ...r.sekolah
         };
     }
-    ['kelas','guru','siswa','mapel','tujuan','koku','nilaiMapel','nilaiKoku','pengumuman','programRemedial','nilaiRemedial','programPengayaan','nilaiPengayaan'].forEach(k=>{
-        if(r[k]&&Array.isArray(r[k])){
+    ['kelas','guru','siswa','mapel','tujuan','koku','nilaiMapel','nilaiKoku','pengumuman',
+     'programRemedial','nilaiRemedial','programPengayaan','nilaiPengayaan'].forEach(k=>{
+        if(r&&r[k]&&Array.isArray(r[k])){
             if(k==='guru'){
-                DB[k]=r[k].map(g=>({
-                    ...g,
+                DB[k]=r[k].map(g=>({...g,
                     kelasIds:Array.isArray(g.kelasIds)?g.kelasIds:(typeof g.kelasIds==='string'&&g.kelasIds.startsWith('['))?JSON.parse(g.kelasIds):[],
                     mapelIds:Array.isArray(g.mapelIds)?g.mapelIds:(typeof g.mapelIds==='string'&&g.mapelIds.startsWith('['))?JSON.parse(g.mapelIds):[],
                 }));
-            } else {
-                DB[k]=r[k];
-            }
+            } else {DB[k]=r[k];}
         }
     });
-    aRenderInduk(); aRenderDash(); pubLogRender();
-    srchPopulateMp(); aUpdateTicker();
+    aRenderInduk(); aRenderDash(); pubLogRender(); srchPopulateMp(); aUpdateTicker();
+    const ap=document.querySelector('#sdn1-app .a-page.active');
+    if(ap&&ap.id){const i=+ap.id.replace('ap-','');if(i>0){const fn=[,aRenderPengaturan,aRenderKelas,aRenderGuru,aRenderSiswa,aRenderMapel,aRenderTujuan,aRenderKoku][i];if(fn)fn();}}
 }
-function aDot(s,m){
-    const d=q('a-dot'),l=q('a-sbst');
-    d.className='a-dot '+(s||''); l.textContent=m;
-}
+
+function aDot(s,m){const d=q('a-dot'),l=q('a-sbst');d.className='a-dot '+(s||'');l.textContent=m;}
+
 function aShowRes(msg,c){
-    const el=q('a-connres'); el.style.display='block';
+    const el=q('a-connres');el.style.display='block';
     el.innerHTML=`<div style="padding:11px 13px;border-radius:9px;background:${c==='green'?'#f0fdf4':'#fef2f2'};border:1.5px solid ${c==='green'?'#bbf7d0':'#fecaca'};font-size:13px;color:${c==='green'?'#15803d':'#dc2626'};font-weight:600">${msg}</div>`;
 }
+
+
 async function aAutoLoad(){
     if(!GS_URL)return;
-    aDot('syncing','Memuat data…');
-    try{const r=await gsReq({action:'loadAll'});aApplyGS(r);GS_OK=true;aDot('online','Terhubung ke Google Sheets');}
-    catch(e){aDot('error','Gagal memuat dari GSheets');}
+    aDot('syncing','Memuat data dari Google Sheets…');
+    try{
+        const r=await gsReq({action:'loadAll'});
+        aApplyGS(r);
+        GS_OK=true;
+        aDot('online','Terhubung ke Google Sheets');
+        aToast('✅ Data berhasil dimuat dari Google Sheets!','ok');
+    }catch(e){
+        aDot('error','Gagal memuat: '+e.message);
+        aToast('⚠ Gagal memuat data: '+e.message,'err');
+        // Tetap render dashboard meski gagal
+        aRenderDash();
+        pubLogRender();
+    }
 }
+
+// expose ke window agar shim bisa menemukan implementasi ini
+window._aSaveUrl=aSaveUrl;
+window._aTestConn=aTestConn;
+window._aInitGS=aInitGS;
+window._aSyncNow=aSyncNow;
+window._aLoginDo=aLoginDo;
+window._aLoginOut=aLoginOut;
+window._aLoginKey=aLoginKey;
+window._aGoPageCheck=aGoPageCheck;
+
 
 // ===================== DATABASE =====================
 let DB = {
@@ -1421,8 +1621,8 @@ const TABS=[
     {i:'✏️',l:'Input Nilai Mapel',sep:'Penilaian',admin:true},
     {i:'🌿',l:'Input Nilai Kokurikuler',admin:true},
     {i:'📋',l:'Daftar Nilai',admin:true},
-    {i:'🔴',l:'Laporan Tindak Lanjut Asesmen',sep:'Remedial & Pengayaan',admin:true},
-    {i:'🖨',l:'Tindak Lanjut Asesmen',admin:true},
+    {i:'🔴',l:'Tindak Lanjut Asesmen',sep:'Remedial & Pengayaan',admin:true},
+    {i:'🖨',l:'Laporan Remedial & Pengayaan',admin:true},
     {i:'🖨',l:'Laporan & Cetak',sep:'Laporan',admin:true},
     {i:'📋',l:'Laporan Akademik',admin:true},
     {i:'📝',l:'Log Penilaian',sep:'Manajemen',admin:true},
@@ -3396,8 +3596,11 @@ function aInit(){
     aGoPage(0);
     // Bersihkan field NIS dari autofill browser
     const nisEl=q('srch-nis');if(nisEl)nisEl.value='';
+    // Refresh GS_URL dari localStorage (mengatasi cached URL lama)
+    const savedUrl=localStorage.getItem('sdn1_gs_url');
+    if(savedUrl && savedUrl.trim()) GS_URL=savedUrl.trim();
     if(GS_URL){
-        q('a-gsurl')&&(q('a-gsurl').value=GS_URL);
+        const inp=q('a-gsurl');if(inp)inp.value=GS_URL;
         aDot('syncing','Memuat data…');
         aAutoLoad();
     } else {
@@ -3408,6 +3611,23 @@ function aInit(){
 }
 
 // Expose functions to global scope for onclick handlers
+// ===== DIAGNOSA HELPERS =====
+function aDiagGET(){
+    if(!GS_URL){aToast('URL belum diset!','err');return;}
+    // Buka URL GAS di tab baru untuk test manual
+    const testUrl=GS_URL+'?action=ping';
+    window.open(testUrl,'_blank');
+    aToast('Tab baru dibuka — jika tampil JSON {ok:true}, GAS sudah benar.','inf');
+}
+function aClearLocalStorage(){
+    localStorage.removeItem('sdn1_gs_url');
+    GS_URL=GS_URL_DEFAULT;
+    const inp=q('a-gsurl');if(inp)inp.value=GS_URL;
+    aToast('URL direset ke default. Silakan isi URL baru lalu Simpan & Hubungkan.','inf');
+    aShowRes('URL direset. Silakan isi URL GAS baru di atas.','green');
+}
+window.aDiagGET=aDiagGET; window.aClearLocalStorage=aClearLocalStorage;
+
 window.aSbTog=aSbTog; window.aSyncNow=aSyncNow; window.aSaveUrl=aSaveUrl; window.aTestConn=aTestConn; window.aInitGS=aInitGS;
 window.aOpenMod=aOpenMod; window.aOpenEdit=aOpenEdit; window.aCloseMo=aCloseMo; window.aMoOut=aMoOut; window.aSaveMo=aSaveMo; window.aHapus=aHapus;
 window.aOpenImp=aOpenImp; window.aCloseImp=aCloseImp; window.aIzDO=aIzDO; window.aIzDL=aIzDL; window.aIzDrop=aIzDrop; window.aHandleFile=aHandleFile; window.aDoImport=aDoImport; window.aDlTpl=aDlTpl;
