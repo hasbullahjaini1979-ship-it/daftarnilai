@@ -680,7 +680,7 @@
             </div>
 
             <!-- P11: Menu Cetak Laporan -->
-            <div id="ap-13" class="a-page">
+            <div id="ap-11" class="a-page">
                 <!-- Hero Section -->
                 <div class="a-cetak-hero">
                     <div class="a-cetak-hero-inner">
@@ -796,7 +796,7 @@
 
 
             <!-- P12: TINDAK LANJUT ASESMEN (REMEDIAL & PENGAYAAN) -->
-            <div id="ap-11" class="a-page">
+            <div id="ap-12" class="a-page">
                 <!-- HERO -->
                 <div class="a-cetak-hero" style="background:linear-gradient(135deg,#0d1b2e 0%,#7c3aed 100%)">
                     <div class="a-cetak-hero-inner">
@@ -953,7 +953,7 @@
             </div>
 
             <!-- P13: LAPORAN REMEDIAL & PENGAYAAN -->
-            <div id="ap-12" class="a-page">
+            <div id="ap-13" class="a-page">
                 <div class="a-cetak-hero" style="background:linear-gradient(135deg,#4c1d95 0%,#7c3aed 100%)">
                     <div class="a-cetak-hero-inner">
                         <div class="a-cetak-hero-ico">🖨</div>
@@ -1269,42 +1269,22 @@ const KOKU_CLS   = {'MULAI BERKEMBANG':'kMB','BERKEMBANG':'kB','CAKAP':'kC','MAH
 const KOKU_BADGE = {'MULAI BERKEMBANG':'rb-MB','BERKEMBANG':'rb-B','CAKAP':'rb-C','MAHIR':'rb-M'};
 
 // ===================== GOOGLE SHEETS =====================
-// URL GAS: baca dari localStorage (disimpan saat Simpan URL), fallback ke URL default
-const GS_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbxxuq8BQuDG4aWjUrdcQYYq8SxEyEqdsUjTezSg9R-iylTM3XdJBPggetfC4ExVTcM3/exec';
-let GS_URL = localStorage.getItem('sdn1_gs_url') || GS_URL_DEFAULT;
+let GS_URL = 'https://script.google.com/macros/s/AKfycbyJ6PV28o1WP8_MZs-IV6BfMRgNq10yISgU-OhFsom0zAxbWaWim3hfYaRY4c0lXyJP/exec'; // URL GAS tertanam — ubah jika deploy ulang
 let GS_LOAD_ATTEMPTED = false;
 let GS_OK  = false;
 
 async function gsReq(body){
-    if(!GS_URL) throw new Error('URL GAS belum diset. Buka Pengaturan dan simpan URL.');
-    // Gunakan mode no-cors fallback ke text/plain agar tidak kena CORS block
-    const ctrl=new AbortController();
-    const tid=setTimeout(()=>ctrl.abort(),30000); // timeout 30 detik
-    try{
-        const r=await fetch(GS_URL,{
-            method:'POST',
-            body:JSON.stringify(body),
-            headers:{'Content-Type':'text/plain'},
-            signal:ctrl.signal
-        });
-        clearTimeout(tid);
-        if(!r.ok) throw new Error('HTTP '+r.status+': '+r.statusText);
-        const j=await r.json();
-        if(!j.ok) throw new Error(j.error||'Server error dari GAS');
-        return j.result;
-    }catch(err){
-        clearTimeout(tid);
-        if(err.name==='AbortError') throw new Error('Koneksi timeout (>30 detik). Cek koneksi internet.');
-        throw err;
-    }
+    if(!GS_URL) throw new Error('URL belum diset');
+    const r = await fetch(GS_URL,{method:'POST',body:JSON.stringify(body),headers:{'Content-Type':'text/plain'}});
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error||'Server error');
+    return j.result;
 }
 async function aSaveUrl(){
     const u=q('a-gsurl').value.trim();
     if(!u){aToast('URL kosong!','err');return;}
-    if(!u.includes('script.google.com')){aToast('URL tidak valid! Harus dari script.google.com','err');return;}
-    GS_URL=u;
-    localStorage.setItem('sdn1_gs_url',u);
-    aToast('✅ URL disimpan & sedang menguji koneksi…','inf');
+    GS_URL=u; localStorage.setItem('sdn1_gs_url',u);
+    aToast('URL disimpan, menguji…','inf');
     await aTestConn();
 }
 // URL sudah tertanam langsung
@@ -1368,12 +1348,6 @@ function aApplyGS(r){
     });
     aRenderInduk(); aRenderDash(); pubLogRender();
     srchPopulateMp(); aUpdateTicker();
-    // Re-render halaman aktif saat ini jika diperlukan
-    const activePg=document.querySelector('#sdn1-app .a-page.active');
-    if(activePg&&activePg.id){
-        const pgIdx=+activePg.id.replace('ap-','');
-        if(pgIdx>0){const fn=[,aRenderPengaturan,aRenderKelas,aRenderGuru,aRenderSiswa,aRenderMapel,aRenderTujuan,aRenderKoku][pgIdx];if(fn)fn();}
-    }
 }
 function aDot(s,m){
     const d=q('a-dot'),l=q('a-sbst');
@@ -1385,20 +1359,9 @@ function aShowRes(msg,c){
 }
 async function aAutoLoad(){
     if(!GS_URL)return;
-    aDot('syncing','Memuat data dari Google Sheets…');
-    try{
-        const r=await gsReq({action:'loadAll'});
-        aApplyGS(r);
-        GS_OK=true;
-        aDot('online','Terhubung ke Google Sheets');
-        aToast('✅ Data berhasil dimuat dari Google Sheets!','ok');
-    }catch(e){
-        aDot('error','Gagal memuat: '+e.message);
-        aToast('⚠ Gagal memuat data: '+e.message,'err');
-        // Tetap render dashboard meski gagal
-        aRenderDash();
-        pubLogRender();
-    }
+    aDot('syncing','Memuat data…');
+    try{const r=await gsReq({action:'loadAll'});aApplyGS(r);GS_OK=true;aDot('online','Terhubung ke Google Sheets');}
+    catch(e){aDot('error','Gagal memuat dari GSheets');}
 }
 
 // ===================== DATABASE =====================
@@ -1458,8 +1421,8 @@ const TABS=[
     {i:'✏️',l:'Input Nilai Mapel',sep:'Penilaian',admin:true},
     {i:'🌿',l:'Input Nilai Kokurikuler',admin:true},
     {i:'📋',l:'Daftar Nilai',admin:true},
-    {i:'🔴',l:'Tindak Lanjut Asesmen',sep:'Remedial & Pengayaan',admin:true},
-    {i:'🖨',l:'Laporan Remedial & Pengayaan',admin:true},
+    {i:'🔴',l:'Laporan Tindak Lanjut Asesmen',sep:'Remedial & Pengayaan',admin:true},
+    {i:'🖨',l:'Tindak Lanjut Asesmen',admin:true},
     {i:'🖨',l:'Laporan & Cetak',sep:'Laporan',admin:true},
     {i:'📋',l:'Laporan Akademik',admin:true},
     {i:'📝',l:'Log Penilaian',sep:'Manajemen',admin:true},
@@ -3433,11 +3396,8 @@ function aInit(){
     aGoPage(0);
     // Bersihkan field NIS dari autofill browser
     const nisEl=q('srch-nis');if(nisEl)nisEl.value='';
-    // Refresh GS_URL dari localStorage (mengatasi cached URL lama)
-    const savedUrl=localStorage.getItem('sdn1_gs_url');
-    if(savedUrl && savedUrl.trim()) GS_URL=savedUrl.trim();
     if(GS_URL){
-        const inp=q('a-gsurl');if(inp)inp.value=GS_URL;
+        q('a-gsurl')&&(q('a-gsurl').value=GS_URL);
         aDot('syncing','Memuat data…');
         aAutoLoad();
     } else {
