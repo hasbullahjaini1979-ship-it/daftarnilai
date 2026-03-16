@@ -238,7 +238,6 @@ let DB={
   sekolah:{nama:"SD Negeri-1 Raja",kepala:"—",nip:"—",kabupaten:"Kotawaringin Barat",alamat:"Jl. Pangeran Diponegoro No.31 Pangkalan Bun",tahunAjaran:"2025/2026",semester:"Semester 1",logo:LOGO_SRC},
   kelas:[],guru:[],siswa:[],mapel:[],tujuan:[],koku:[],
   nilaiMapel:[],nilaiKoku:[],pengumuman:[],
-  bankSoal:[],hasilQuiz:[],
   programRemedial:[],nilaiRemedial:[],programPengayaan:[],nilaiPengayaan:[]
 };
 
@@ -250,7 +249,7 @@ let STATE={
   // For siswa filter state persistence
   filterSiswaKls:0,
 };
-const GS_URL_DEFAULT='https://script.google.com/macros/s/AKfycbx4H-P6M3pN03J-uNnDej_YNy448dLT9QzuhMGN08c4Hvhb_CyGygSvPzEGdH0KMb5J/exec';
+const GS_URL_DEFAULT='https://script.google.com/macros/s/AKfycbxHCvUfjj6PsU8U_Gvk6Cy3RtbnfeDT4pQJiz2GmnZFrJtwDIEAxdxjwF3010liMEZg/exec';
 
 // ===== HELPERS =====
 const $=id=>document.getElementById(id);
@@ -344,7 +343,7 @@ async function gsReq(body){
   return await gsFetchPost(body);
 }
 async function syncToGS(){
-  await gsReq({action:'saveAll',payload:{sekolah:DB.sekolah,kelas:DB.kelas,guru:DB.guru,siswa:DB.siswa,mapel:DB.mapel,tujuan:DB.tujuan,koku:DB.koku,nilaiMapel:DB.nilaiMapel,nilaiKoku:DB.nilaiKoku,pengumuman:DB.pengumuman,bankSoal:DB.bankSoal,hasilQuiz:DB.hasilQuiz,programRemedial:DB.programRemedial,nilaiRemedial:DB.nilaiRemedial,programPengayaan:DB.programPengayaan,nilaiPengayaan:DB.nilaiPengayaan}});
+  await gsReq({action:'saveAll',payload:{sekolah:DB.sekolah,kelas:DB.kelas,guru:DB.guru,siswa:DB.siswa,mapel:DB.mapel,tujuan:DB.tujuan,koku:DB.koku,nilaiMapel:DB.nilaiMapel,nilaiKoku:DB.nilaiKoku,pengumuman:DB.pengumuman,programRemedial:DB.programRemedial,nilaiRemedial:DB.nilaiRemedial,programPengayaan:DB.programPengayaan,nilaiPengayaan:DB.nilaiPengayaan}});
   STATE.gsOk=true;setDot('online','Tersinkron');
 }
 async function autoLoad(){
@@ -356,13 +355,13 @@ async function autoLoad(){
 function applyGsData(r){
   if(!r)return;
   if(r.sekolah)DB.sekolah={...{nama:"SD Negeri-1 Raja",kepala:"—",nip:"—",kabupaten:"Kotawaringin Barat",alamat:"—",tahunAjaran:"2025/2026",semester:"Semester 1",logo:LOGO_SRC},...r.sekolah};
-  ['kelas','guru','siswa','mapel','tujuan','koku','nilaiMapel','nilaiKoku','pengumuman','bankSoal','hasilQuiz','programRemedial','nilaiRemedial','programPengayaan','nilaiPengayaan'].forEach(k=>{
+  ['kelas','guru','siswa','mapel','tujuan','koku','nilaiMapel','nilaiKoku','pengumuman','programRemedial','nilaiRemedial','programPengayaan','nilaiPengayaan'].forEach(k=>{
     if(r[k]&&Array.isArray(r[k])){
       if(k==='guru')DB[k]=r[k].map(g=>({...g,kelasIds:Array.isArray(g.kelasIds)?g.kelasIds:(typeof g.kelasIds==='string'&&g.kelasIds.startsWith('['))?JSON.parse(g.kelasIds):[],mapelIds:Array.isArray(g.mapelIds)?g.mapelIds:(typeof g.mapelIds==='string'&&g.mapelIds.startsWith('['))?JSON.parse(g.mapelIds):[]}));
       else DB[k]=r[k];
     }
   });
-  if(!DB.hasilQuiz)DB.hasilQuiz=[];
+  
   renderCurrentPage();updateTicker();updateHeaderInfo();
 }
 function setDot(s,m){const d=$('s-dot'),l=$('s-status');if(d)d.className='status-dot '+(s||'');if(l)l.textContent=m||'';}
@@ -372,30 +371,6 @@ async function syncNow(){
   try{await syncToGS();toast('✅ Sinkronisasi berhasil!','ok');}
   catch(e){setDot('error','Gagal');toast('❌ '+e.message,'err');}
 }
-
-// ===== CLAUDE AI via GAS PROXY (Solusi CORS) =====
-// Memanggil Anthropic API melalui Google Apps Script sebagai proxy
-// sehingga menghindari blokir CORS browser
-async function callClaudeAPI(prompt, maxTokens) {
-  const url = STATE.gsUrl || GS_URL_DEFAULT;
-  if (!url) throw new Error('URL GAS belum diset. Silakan hubungkan Google Sheets di menu Pengaturan.');
-
-  // Kirim request ke GAS proxy
-  const res = await fetch(url, {
-    method: 'POST',
-    body: JSON.stringify({ action: 'claudeProxy', prompt: prompt, maxTokens: maxTokens || 1500 }),
-    headers: { 'Content-Type': 'text/plain' },
-    redirect: 'follow'
-  });
-
-  if (!res.ok) throw new Error('GAS Proxy HTTP Error ' + res.status);
-  const text = await res.text();
-  let data;
-  try { data = JSON.parse(text); } catch (e) { throw new Error('Response bukan JSON: ' + text.slice(0, 100)); }
-  if (!data.ok) throw new Error(data.error || 'GAS Proxy error');
-  return data.result;
-}
-
 
 // ===== LOGIN =====
 let _loginRole='';
@@ -482,12 +457,10 @@ const MENUS={
     {id:'peringkat',ico:'🏆',lbl:'Peringkat'},
     {sep:'Lainnya'},
     {id:'pengumuman',ico:'📢',lbl:'Pengumuman'},
-    {id:'bank-soal',ico:'📝',lbl:'Bank Soal'},
   ],
   murid:[
     {id:'dashboard',ico:'🏠',lbl:'Dashboard'},
     {id:'nilai-murid',ico:'📊',lbl:'Nilai Saya'},
-    {id:'bank-soal-murid',ico:'📝',lbl:'Bank Soal'},
   ],
 };
 
@@ -729,7 +702,7 @@ function getGuruPage(id){
   if(id==='log')return buildLogPage();
   if(id==='peringkat')return buildPeringkatPage();
   if(id==='pengumuman')return buildPengumumanPage();
-  if(id==='bank-soal')return buildBankSoalPage();
+
   return '<div class="card">Halaman tidak ditemukan</div>';
 }
 
@@ -751,12 +724,12 @@ function buildGuruDash(){
   <div class="stats-grid">
     <div class="stat-card" style="background:linear-gradient(135deg,#CC2222,#991111)"><div class="stat-ico">👧</div><div><div class="stat-val">${siswaCount}</div><div class="stat-lbl">Siswa</div></div></div>
     <div class="stat-card" style="background:linear-gradient(135deg,#16a34a,#15803d)"><div class="stat-ico">📖</div><div><div class="stat-val">${myMp.length}</div><div class="stat-lbl">Mapel Diajar</div></div></div>
-    <div class="stat-card" style="background:linear-gradient(135deg,#7c3aed,#6d28d9)"><div class="stat-ico">📝</div><div><div class="stat-val">${DB.bankSoal.filter(s=>s.guruId===STATE.activeGuruId).length}</div><div class="stat-lbl">Bank Soal</div></div></div>
+
   </div>
   <div class="card">
     <div class="card-title">⚡ Aksi Cepat</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px">
-      ${[['✏️','Input Nilai','input-nilai','var(--blue)'],['🌿','Input Kokurikuler','input-koku','#16a34a'],['📋','Daftar Nilai','daftar-nilai','#7c3aed'],['🏆','Peringkat','peringkat','var(--yellow)'],['📄','Cetak Laporan','cetak','#0891b2'],['📝','Bank Soal','bank-soal','#cc2222']].map(([ico,lbl,pg,color])=>`
+      ${[['✏️','Input Nilai','input-nilai','var(--blue)'],['🌿','Input Kokurikuler','input-koku','#16a34a'],['📋','Daftar Nilai','daftar-nilai','#7c3aed'],['🏆','Peringkat','peringkat','var(--yellow)'],['📄','Cetak Laporan','cetak','#0891b2'],].map(([ico,lbl,pg,color])=>`
         <button onclick="goPage('${pg}')" style="background:${color}18;border:2px solid ${color}40;border-radius:12px;padding:12px 8px;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;font-weight:700;color:${color==='var(--yellow)'?'#b45309':color};transition:all .2s;cursor:pointer" onmouseover="this.style.background='${color}30'" onmouseout="this.style.background='${color}18'">
           <span style="font-size:22px">${ico}</span>${lbl}</button>`).join('')}
     </div>
@@ -977,17 +950,6 @@ function buildDaftarNilaiPage(){
     if(!logMap[key])logMap[key]={tgl:n.tgl,kelasId:kid,mapelId:n.mapelId,waktu:n.waktu||'—',jenis:n.jenis||'—',sumber:'manual',count:0,key};
     logMap[key].count++;
   });
-  // Also add quiz results
-  DB.hasilQuiz.forEach(hq=>{
-    const s=DB.siswa.find(x=>x.id===hq.siswaId);
-    const kid=s?s.kelasId:0;
-    if(!myKls.includes(kid))return;
-    if(filterKls&&kid!==filterKls)return;
-    if(filterMp&&hq.mapelId!==filterMp)return;
-    const key=[hq.tgl,kid,hq.mapelId,'Online','Bank Soal Online','quiz'].join('|');
-    if(!logMap[key])logMap[key]={tgl:hq.tgl,kelasId:kid,mapelId:hq.mapelId,waktu:'Online',jenis:'Bank Soal Online',sumber:'quiz',count:0,key};
-    logMap[key].count++;
-  });
   
   const logList=Object.values(logMap).sort((a,b)=>(b.tgl||'').localeCompare(a.tgl||''));
   
@@ -1050,7 +1012,6 @@ function loadDnDetail(bodyId,key){
   if(sumber==='quiz'){
     // Show quiz results
     const rows=sw.map((s,i)=>{
-      const hq=DB.hasilQuiz.find(h=>h.siswaId===s.id&&h.mapelId===mid&&h.tgl===tgl);
       const nilai=hq?hq.nilai:null;const nc=nilai>=75?'#16a34a':'var(--red)';
       return`<tr style="${i%2?'background:#f8faff':''}"><td>${i+1}</td><td style="font-size:11px;color:var(--gray)">${s.nis}</td><td style="font-weight:600">${s.nama}</td><td style="text-align:center;font-weight:900;font-size:15px;color:${nilai!==null?nc:'#ccc'}">${nilai!==null?nilai:'—'}</td><td style="text-align:center">${hq?`<span class="badge bg-green" style="font-size:10px">Dikerjakan</span>`:'<span class="badge bg-gray" style="font-size:10px">Belum</span>'}</td></tr>`;
     }).join('');
@@ -1316,631 +1277,61 @@ function buildPengumumanPage(){
 }
 
 // ===== BANK SOAL (FIX #10,11,12) =====
-function buildBankSoalPage(){
-  const myKls=getAllOrGuruKelasIds();
-  const filterKls=$('f-bs-kls')?+$('f-bs-kls').value:0;
-  const filterMp=$('f-bs-mp')?+$('f-bs-mp').value:0;
-  let soals=DB.bankSoal.filter(s=>s.guruId===STATE.activeGuruId||!s.guruId||STATE.role==='admin');
-  if(filterKls)soals=soals.filter(s=>s.kelasId===filterKls);
-  if(filterMp)soals=soals.filter(s=>s.mapelId===filterMp);
-  
-  // FIX #12: Group by (mapel + tanggal dibuat) - compact list
-  const groups={};
-  soals.forEach(s=>{
-    const key=`${s.mapelId}|${s.createdAt||''}`;
-    if(!groups[key])groups[key]={mapelId:s.mapelId,kelasId:s.kelasId,createdAt:s.createdAt||'',soals:[]};
-    groups[key].soals.push(s);
-  });
-  const groupList=Object.values(groups).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
-  
-  const groupCards=groupList.map((g,gi)=>{
-    const mp=gMapel(g.mapelId),kls=gKelas(g.kelasId);
-    const gBodyId='bs-g-'+gi;
-    const soalItems=g.soals.map((s,si)=>`
-    <div style="border:1.5px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;background:#fafcff">
-      <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px">
-        <div style="flex:1">
-          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:5px">
-            ${s.tujuanId?`<span class="badge bg-gray" style="font-size:10px">${gTujuan(s.tujuanId).tp?.slice(0,30)||'—'}</span>`:''}
-          </div>
-          ${s.indikator?`<div style="font-size:11px;color:var(--gray);font-style:italic;margin-bottom:4px">📌 ${s.indikator}</div>`:''}
-          <div style="font-size:13px;font-weight:600;line-height:1.5">${si+1}. ${s.soal}</div>
-          <div style="margin-top:8px">${(s.opsi||[]).map((o,oi)=>`<div class="soal-opsi${o.kunci?' correct':''}"><div class="soal-opsi-key">${String.fromCharCode(65+oi)}</div><div style="flex:1">${o.teks}</div>${o.kunci?'<span style="font-size:12px;color:#16a34a">✓</span>':''}</div>`).join('')}</div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
-          <button class="btn btn-yellow btn-sm" onclick="editBankSoal(${s.id})">✏️</button>
-          <button class="btn btn-red btn-sm" onclick="hapusData('bs',${s.id})">🗑</button>
-        </div>
-      </div>
-    </div>`).join('');
-    return `<div class="bs-group">
-      <div class="bs-group-head" onclick="toggleBsGroup('${gBodyId}')">
-        <div style="width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#cc2222,#991111);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0">📝</div>
-        <div style="flex:1">
-          <div style="font-weight:800;font-size:13px">${mp.nama||'—'}</div>
-          <div style="font-size:11px;color:var(--gray)">${kls.nama||'—'} ${g.createdAt?'• '+fmtD(g.createdAt):''}</div>
-        </div>
-        <span class="badge bg-red" style="font-size:11px">${g.soals.length} soal</span>
-        <span style="color:var(--gray);padding-left:8px">▼</span>
-      </div>
-      <div class="bs-group-body" id="${gBodyId}">
-        ${soalItems}
-        <button class="btn btn-primary btn-sm" onclick="openBankSoalForm(null,${g.mapelId},${g.kelasId})">＋ Tambah ke Grup Ini</button>
-      </div>
-    </div>`;
-  }).join('');
-  
-  return `
-  <div class="hero-section" style="background:linear-gradient(135deg,#CC2222,#991111,#1565C0)">
-    <div class="hero-inner"><div class="hero-ico">📝</div><div class="hero-txt"><h2>Bank Soal</h2><p>Kelola soal per mata pelajaran & tujuan pelajaran</p></div></div>
-  </div>
-  <div class="filter-bar">
-    <select id="f-bs-kls" onchange="bsUpdFilter()"><option value="">Semua Kelas</option>${DB.kelas.filter(k=>myKls.includes(k.id)).map(k=>`<option value="${k.id}"${filterKls===k.id?' selected':''}>${k.nama}</option>`).join('')}</select>
-    <select id="f-bs-mp" onchange="goPage('bank-soal')"><option value="">Semua Mapel</option>${DB.mapel.filter(m=>myKls.includes(m.kelasId)&&(!filterKls||m.kelasId===filterKls)).map(m=>`<option value="${m.id}"${filterMp===m.id?' selected':''}>${m.nama}</option>`).join('')}</select>
-    <span style="font-size:12px;color:var(--gray)">${soals.length} soal</span>
-  </div>
-  <div class="toolbar">
-    <button class="btn btn-primary" onclick="openBankSoalForm(null,0,0)">＋ Tambah Soal</button>
-    <button class="btn btn-info" onclick="openGenModal()">✨ Generate AI</button>
-  </div>
-  <div id="bs-form-area"></div>
-  ${groupCards||'<div class="card" style="text-align:center;color:var(--gray);padding:36px"><div style="font-size:34px;margin-bottom:10px">📝</div><div>Belum ada soal. Tambah atau generate dengan AI!</div></div>'}`;
-}
-function toggleBsGroup(id){const b=document.getElementById(id);if(b)b.classList.toggle('open');}
-function bsUpdFilter(){const kid=$('f-bs-kls')?.value;$('f-bs-mp').innerHTML='<option value="">Semua Mapel</option>'+DB.mapel.filter(m=>!kid||m.kelasId===+kid).map(m=>`<option value="${m.id}">${m.nama}</option>`).join('');goPage('bank-soal');}
-
-let _bsEditId=null;
-function openBankSoalForm(sid,prefMpId,prefKlsId){
-  _bsEditId=sid;
-  const s=sid?DB.bankSoal.find(x=>x.id===sid):null;
-  const myKls=getAllOrGuruKelasIds();
-  const klsId=s?.kelasId||prefKlsId||0;
-  // FIX #11: TP filter by both kelas AND mapel selected
-  const mpOpts=DB.mapel.filter(m=>!klsId||m.kelasId===+klsId).map(m=>`<option value="${m.id}"${m.id===(s?.mapelId||prefMpId)?' selected':''}>${m.nama}</option>`).join('');
-  const tpOpts=s?.mapelId?DB.tujuan.filter(t=>t.kelasId===(s.kelasId||0)&&t.mapelId===s.mapelId).map(t=>`<option value="${t.id}"${t.id===s?.tujuanId?' selected':''}>${t.tp.slice(0,60)}</option>`).join(''):'';
-  const opsiHtml=(s?.opsi||[{teks:'',kunci:false},{teks:'',kunci:false},{teks:'',kunci:false},{teks:'',kunci:false}]).map((o,i)=>`
-  <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
-    <div style="width:28px;height:28px;border-radius:50%;background:var(--blue);color:#fff;font-weight:900;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0">${String.fromCharCode(65+i)}</div>
-    <input type="text" id="bs-opsi-${i}" value="${o.teks||''}" placeholder="Opsi ${String.fromCharCode(65+i)}" style="flex:1;border:2px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;outline:none">
-    <input type="text" id="bs-opsi-img-${i}" value="${o.gambar||''}" placeholder="URL Gambar (opsional)" style="flex:0 0 120px;border:2px solid var(--border);border-radius:8px;padding:7px 10px;font-size:11px;outline:none">
-    <label style="display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap;cursor:pointer"><input type="radio" name="bs-kunci" value="${i}" ${o.kunci?' checked':''}> Kunci</label>
-  </div>`).join('');
-  const formHtml=`
-  <div class="card" style="border:2px solid var(--blue);background:#f0f7ff">
-    <div class="card-title">${sid?'✏️ Edit Soal':'➕ Tambah Soal'}</div>
-    <div class="grid2">
-      <div class="field"><label>Kelas</label><select id="bs-kls" onchange="bsFormUpdMp()"><option value="">-- Pilih --</option>${DB.kelas.filter(k=>myKls.includes(k.id)).map(k=>`<option value="${k.id}"${k.id===+klsId?' selected':''}>${k.nama}</option>`).join('')}</select></div>
-      <div class="field"><label>Mata Pelajaran</label><select id="bs-mp" onchange="bsFormUpdTP()"><option value="">-- Pilih --</option>${mpOpts}</select></div>
-      <div class="field" style="grid-column:1/-1"><label>Tujuan Pelajaran (sesuai kelas & mapel)</label><select id="bs-tp"><option value="">-- Pilih TP --</option>${tpOpts}</select></div>
-    </div>
-    <div class="field"><label>Indikator Soal</label>
-      <div style="display:flex;gap:7px">
-        <input type="text" id="bs-indikator" value="${s?.indikator||''}" placeholder="Contoh: Siswa dapat menentukan..." style="flex:1;border:2px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;outline:none">
-        <button class="btn btn-info btn-sm" onclick="genIndikator()">✨ AI</button>
-      </div>
-    </div>
-    <div class="field"><label>Butir Soal</label>
-      <div style="display:flex;gap:7px;margin-bottom:7px"><button class="btn btn-info btn-sm" onclick="genSoal()">✨ Generate Soal AI</button></div>
-      <textarea id="bs-soal" rows="3" style="width:100%;border:2px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;outline:none;resize:vertical">${s?.soal||''}</textarea>
-    </div>
-    <div class="field"><label>Opsi Jawaban</label>${opsiHtml}</div>
-    <div style="display:flex;gap:8px;margin-top:6px">
-      <button class="btn btn-green" onclick="simpanBankSoal()">💾 Simpan Soal</button>
-      <button class="btn btn-gray" onclick="$('bs-form-area').innerHTML=''">Batal</button>
-    </div>
-  </div>`;
-  $('bs-form-area').innerHTML=formHtml;
-  $('bs-form-area').scrollIntoView({behavior:'smooth',block:'start'});
-}
-// FIX #11: Update TP based on BOTH kelas and mapel
-function bsFormUpdMp(){
-  const kid=$('bs-kls')?.value;const sel=$('bs-mp');if(!sel)return;
-  sel.innerHTML='<option value="">-- Pilih --</option>'+DB.mapel.filter(m=>!kid||m.kelasId===+kid).map(m=>`<option value="${m.id}">${m.nama}</option>`).join('');
-  const tp=$('bs-tp');if(tp)tp.innerHTML='<option value="">-- Pilih TP --</option>';
-}
-function bsFormUpdTP(){
-  const kid=$('bs-kls')?.value,mid=$('bs-mp')?.value;
-  const tp=$('bs-tp');if(!tp)return;
-  // FIX: filter TP by BOTH kelas AND mapel
-  tp.innerHTML='<option value="">-- Pilih TP --</option>'+(kid&&mid?DB.tujuan.filter(t=>t.kelasId===+kid&&t.mapelId===+mid):DB.tujuan).map(t=>`<option value="${t.id}">${t.tp.slice(0,60)}</option>`).join('');
-}
-
-async function simpanBankSoal(){
-  const kls=+$('bs-kls')?.value,mp=+$('bs-mp')?.value,tp=+$('bs-tp')?.value||null;
-  const soal=$('bs-soal')?.value.trim(),indikator=$('bs-indikator')?.value.trim();
-  if(!mp||!soal){toast('Lengkapi Mapel dan Butir Soal!','err');return;}
-  const kunci=document.querySelector('input[name="bs-kunci"]:checked')?.value;
-  const opsi=[0,1,2,3].map(i=>({teks:document.getElementById('bs-opsi-'+i)?.value.trim()||'',gambar:document.getElementById('bs-opsi-img-'+i)?.value.trim()||'',kunci:String(i)===(kunci||'')})).filter(o=>o.teks);
-  const data={id:_bsEditId||gId(DB.bankSoal),guruId:STATE.activeGuruId,kelasId:kls,mapelId:mp,tujuanId:tp,indikator,soal,gambarSoal:'',opsi,createdAt:_bsEditId?(DB.bankSoal.find(x=>x.id===_bsEditId)?.createdAt||todayStr()):todayStr()};
-  if(_bsEditId){const idx=DB.bankSoal.findIndex(x=>x.id===_bsEditId);if(idx>=0)DB.bankSoal[idx]=data;}
-  else DB.bankSoal.push(data);
-  $('bs-form-area').innerHTML='';toast('✅ Soal disimpan!','ok');if(STATE.gsOk)await syncToGS();goPage('bank-soal');
-}
-function editBankSoal(id){openBankSoalForm(id,0,0);}
-
-// FIX #10: AI generate functions - ensure API call works
-async function genIndikator(){
-  const mid=+$('bs-mp')?.value;const kid=+$('bs-kls')?.value;const tid=+$('bs-tp')?.value||0;
-  const tpObj=tid?gTujuan(tid):null;const mpObj=mid?gMapel(mid):{nama:'mapel ini'};const klsObj=kid?gKelas(kid):{nama:'SD'};
-  if(!mid){toast('Pilih Mapel dulu!','inf');return;}
-  const btn=document.querySelector('button[onclick="genIndikator()"]');if(btn){btn.disabled=true;btn.textContent='⏳...';}
-  try{
-    const prompt=`Buat 1 indikator soal yang spesifik dan terukur untuk:\n- Mata Pelajaran: ${mpObj.nama}\n- Kelas: ${klsObj.nama}\n${tpObj&&tpObj.tp!=='—'?'- Tujuan Pelajaran: '+tpObj.tp:''}\nIndikator singkat, gunakan kata kerja operasional. Hanya tulis indikatornya saja tanpa penjelasan tambahan.`;
-    const result=await callClaudeAPI(prompt);
-    const inp=$('bs-indikator');if(inp)inp.value=result.trim();toast('✅ Indikator digenerate!','ok');
-  }catch(e){toast('❌ Gagal: '+e.message,'err');}
-  finally{if(btn){btn.disabled=false;btn.textContent='✨ AI';}}
-}
-async function genSoal(){
-  const indikator=$('bs-indikator')?.value.trim();const mid=+$('bs-mp')?.value;const kid=+$('bs-kls')?.value;const tid=+$('bs-tp')?.value||0;
-  const mpObj=mid?gMapel(mid):{nama:'mapel ini'};const klsObj=kid?gKelas(kid):{nama:'SD'};const tpObj=tid?gTujuan(tid):null;
-  const btn=document.querySelector('button[onclick="genSoal()"]');if(btn){btn.disabled=true;btn.textContent='⏳ Generating...';}
-  try{
-    const prompt=`Buat 1 soal pilihan ganda untuk:\n- Mata Pelajaran: ${mpObj.nama}\n- Kelas: ${klsObj.nama}\n${tpObj&&tpObj.tp!=='—'?'- Tujuan Pelajaran: '+tpObj.tp:''}\n${indikator?'- Indikator: '+indikator:''}\n\nFormat JSON (tanpa markdown/backtick):\n{"soal":"...","opsiA":"...","opsiB":"...","opsiC":"...","opsiD":"...","kunci":"A"}\nJawab HANYA dengan JSON tersebut, tidak ada teks lain.`;
-    const result=await callClaudeAPI(prompt);
-    const clean=result.replace(/\`\`\`json?|\`\`\`/g,'').trim();
-    const j=JSON.parse(clean);
-    if($('bs-soal'))$('bs-soal').value=j.soal||'';
-    ['A','B','C','D'].forEach((l,i)=>{const inp=document.getElementById('bs-opsi-'+i);if(inp)inp.value=j['opsi'+l]||'';});
-    const kunciIdx=['A','B','C','D'].indexOf(j.kunci||'A');
-    if(kunciIdx>=0){const radio=document.querySelector(`input[name="bs-kunci"][value="${kunciIdx}"]`);if(radio)radio.checked=true;}
-    toast('✅ Soal digenerate!','ok');
-  }catch(e){toast('❌ Gagal generate soal: '+e.message,'err');}
-  finally{if(btn){btn.disabled=false;btn.textContent='✨ Generate Soal AI';}}
-}
-function openGenModal(){openMoCrud('gen-soal',null);}
-
-// ===== REMEDIAL (FIX #5,6,7,8) =====
-function buildRemedialPage(){
-  const myKls=getAllOrGuruKelasIds();
-  const klsOpts=DB.kelas.filter(k=>myKls.includes(k.id)).map(k=>`<option value="${k.id}">${k.nama}</option>`).join('');
-  const filterKls=$('rm-list-kls')?+$('rm-list-kls').value:0;
-  const filterJenis=$('rm-list-jenis')?$('rm-list-jenis').value:'';
-  let progRows=[];
-  if(!filterJenis||filterJenis==='remedial')DB.programRemedial.filter(p=>!filterKls||p.kelasId===filterKls).forEach(p=>progRows.push({...p,jenis:'remedial'}));
-  if(!filterJenis||filterJenis==='pengayaan')DB.programPengayaan.filter(p=>!filterKls||p.kelasId===filterKls).forEach(p=>progRows.push({...p,jenis:'pengayaan'}));
-  progRows.sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
-  const progTbl=progRows.map((p,i)=>{
-    const jBadge=p.jenis==='remedial'?'<span class="badge bg-red">Remedial</span>':'<span class="badge bg-green">Pengayaan</span>';
-    const stColor=p.status==='selesai'?'#16a34a':p.status==='berlangsung'?'var(--yellow)':'var(--blue)';
-    return`<tr style="${i%2?'background:#f8faff':''}"><td>${jBadge}</td><td style="font-weight:700">${p.namaKelas||'—'}</td><td>${p.namaMapel||'—'}</td><td style="font-size:11px;white-space:nowrap">${fmtD(p.tglPelaksanaan)}</td><td style="text-align:center;font-weight:700;color:var(--blue)">${(p.siswaIds||[]).length}</td><td style="text-align:center"><span style="background:${stColor};color:#fff;padding:3px 9px;border-radius:5px;font-size:10px;font-weight:700">${p.status==='selesai'?'Selesai':p.status==='berlangsung'?'Berjalan':'Terjadwal'}</span></td><td><div style="display:flex;gap:4px"><button class="btn btn-yellow btn-sm" onclick="bukaInputNilaiRM('${p.jenis}',${p.id})">✏️ Nilai</button><button class="btn btn-red btn-sm" onclick="hapusProgram('${p.jenis}',${p.id})">🗑</button></div></td></tr>`;
-  }).join('');
-  
-  return `
-  <div class="hero-section" style="background:linear-gradient(135deg,var(--dark),#7c3aed)">
-    <div class="hero-inner"><div class="hero-ico">📋</div><div class="hero-txt"><h2>Tindak Lanjut Asesmen</h2><p>Program Remedial & Pengayaan</p></div></div>
-  </div>
-  
-  <div class="card">
-    <div class="card-title">🔍 Analisis Asesmen</div>
-    <div class="grid2">
-      <div class="field"><label>Kelas</label><select id="rm-kls" onchange="rmUpdMapel()"><option value="">-- Pilih --</option>${klsOpts}</select></div>
-      <div class="field"><label>Mata Pelajaran</label><select id="rm-mp" onchange="rmUpdTP()"><option value="">-- Pilih --</option></select></div>
-      <div class="field"><label>Tujuan Pelajaran</label><select id="rm-tp"><option value="">-- Semua TP --</option></select></div>
-      <div class="field"><label>Waktu Asesmen</label><select id="rm-waktu"><option value="">-- Semua --</option><option>Sumatif Lingkup Materi</option><option>Sumatif Tengah Semester</option><option>Sumatif Akhir Semester</option><option>Sumatif Akhir Jenjang</option></select></div>
-    </div>
-    
-    <!-- FIX #5: Log Asesmen dengan tombol Tampilkan Analisis -->
-    <div id="rm-log-wrap" style="display:none">
-      <div style="font-weight:700;font-size:12px;color:var(--dark);margin-bottom:8px;margin-top:4px">📅 Log Asesmen Kelas:</div>
-      <div id="rm-log-list"></div>
-    </div>
-    
-    <button class="btn btn-primary" onclick="rmLoad()">▶ Tampilkan Analisis</button>
-  </div>
-  
-  <div id="rm-analisis-wrap" style="display:none">
-    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)" id="rm-stats"></div>
-    <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-        <div class="card-title" style="margin-bottom:0">📊 Analisis Per Siswa</div>
-        <div style="display:flex;gap:7px">
-          <button class="btn btn-red btn-sm" id="btn-rm-remedial" style="display:none" onclick="rmBuatProgram('remedial')">🔴 Buat Remedial</button>
-          <button class="btn btn-green btn-sm" id="btn-rm-pengayaan" style="display:none" onclick="rmBuatProgram('pengayaan')">🟢 Buat Pengayaan</button>
-        </div>
-      </div>
-      <div class="tbl-wrap"><table id="tbl-rm-analisis"></table></div>
-    </div>
-    
-    <!-- FIX #6,7,8: Form Remedial dengan AI Generate -->
-    <div id="rm-form-remedial" class="card" style="display:none;border:2px solid var(--red);background:#fff9f9">
-      <div class="card-title" style="color:var(--red)">📋 Form Program Remedial</div>
-      <div class="grid2">
-        <div class="field"><label>Tanggal Pelaksanaan</label><input type="date" id="rm-tgl-pelaks"></div>
-        <div class="field"><label>Metode</label><select id="rm-metode" onchange="rmMetodeChg()"><option value="">-- Pilih Metode --</option><option>Pembelajaran Ulang</option><option>Tutor Sebaya</option><option>Penugasan Khusus</option><option>Bimbingan Individual</option><option>Tes Ulang</option></select></div>
-      </div>
-      
-      <!-- FIX #6: AI Generate Materi -->
-      <div class="field">
-        <label>Materi yang Diremediasi</label>
-        <div style="display:flex;gap:7px;margin-bottom:6px">
-          <button class="btn btn-info btn-sm" onclick="rmGenMateri()" id="btn-gen-materi">✨ Generate AI Materi</button>
-          <span style="font-size:11px;color:var(--gray);align-self:center">Berdasarkan Tujuan Pelajaran</span>
-        </div>
-        <textarea id="rm-materi" rows="3" style="width:100%;border:2px solid var(--border);border-radius:9px;padding:8px 11px;font-size:13px;font-family:var(--font);outline:none;resize:vertical" placeholder="Tuliskan atau generate AI materi yang perlu diremediasi..."></textarea>
-      </div>
-      
-      <!-- FIX #7: AI Generate Langkah (disabled until metode dipilih) -->
-      <div class="field">
-        <label>Langkah Kegiatan</label>
-        <div style="display:flex;gap:7px;margin-bottom:6px">
-          <button class="btn btn-info btn-sm" onclick="rmGenLangkah()" id="btn-gen-langkah" disabled title="Pilih metode dulu">✨ Generate AI Langkah</button>
-          <span style="font-size:11px;color:var(--gray);align-self:center" id="gen-langkah-hint">Pilih metode terlebih dahulu</span>
-        </div>
-        <textarea id="rm-langkah" rows="4" style="width:100%;border:2px solid var(--border);border-radius:9px;padding:8px 11px;font-size:13px;font-family:var(--font);outline:none;resize:vertical" placeholder="Tuliskan atau generate AI langkah kegiatan..."></textarea>
-      </div>
-      
-      <!-- FIX #8: AI Generate Alat/Sumber -->
-      <div class="field">
-        <label>Alat / Sumber Belajar</label>
-        <div style="display:flex;gap:7px;margin-bottom:6px">
-          <button class="btn btn-info btn-sm" onclick="rmGenSumber()" id="btn-gen-sumber">✨ Generate AI Sumber</button>
-          <span style="font-size:11px;color:var(--gray);align-self:center">Berdasarkan Langkah Kegiatan</span>
-        </div>
-        <input type="text" id="rm-sumber" placeholder="Tuliskan atau generate AI alat/sumber belajar..." style="width:100%">
-      </div>
-      
-      <div style="font-weight:700;font-size:12px;color:var(--red);margin:10px 0 6px">Daftar Siswa Remedial:</div>
-      <div class="tbl-wrap"><table id="tbl-rm-siswa-r"></table></div>
-      <div style="display:flex;gap:8px;margin-top:12px">
-        <button class="btn btn-red" onclick="rmSimpanProgram('remedial')">💾 Simpan</button>
-        <button class="btn btn-gray" onclick="document.getElementById('rm-form-remedial').style.display='none'">Batal</button>
-      </div>
-    </div>
-    
-    <div id="rm-form-pengayaan" class="card" style="display:none;border:2px solid #16a34a;background:#f9fff9">
-      <div class="card-title" style="color:#16a34a">🌟 Form Program Pengayaan</div>
-      <div class="grid2">
-        <div class="field"><label>Tanggal Pelaksanaan</label><input type="date" id="py-tgl-pelaks"></div>
-        <div class="field"><label>Bentuk Kegiatan</label><select id="py-bentuk"><option>Pemecahan Masalah Kompleks</option><option>Proyek Mini</option><option>Menjadi Tutor Sebaya</option><option>Pendalaman Materi Lanjut</option><option>Pemberian Soal HOTS</option><option>Eksplorasi Mandiri</option></select></div>
-      </div>
-      <div class="field"><label>Deskripsi Kegiatan</label><textarea id="py-deskripsi" rows="3" style="width:100%;border:2px solid var(--border);border-radius:9px;padding:8px 11px;font-size:13px;font-family:var(--font);outline:none;resize:vertical"></textarea></div>
-      <div class="field"><label>Alat / Sumber Belajar</label><input type="text" id="py-sumber"></div>
-      <div style="font-weight:700;font-size:12px;color:#16a34a;margin:10px 0 6px">Daftar Siswa Pengayaan:</div>
-      <div class="tbl-wrap"><table id="tbl-rm-siswa-p"></table></div>
-      <div style="display:flex;gap:8px;margin-top:12px">
-        <button class="btn btn-green" onclick="rmSimpanProgram('pengayaan')">💾 Simpan</button>
-        <button class="btn btn-gray" onclick="document.getElementById('rm-form-pengayaan').style.display='none'">Batal</button>
-      </div>
-    </div>
-  </div>
-  
-  <div class="card" style="margin-top:8px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <div class="card-title" style="margin-bottom:0">📂 Program Tersimpan</div>
-      <div style="display:flex;gap:7px">
-        <select id="rm-list-kls" onchange="goPage('remedial')" style="border:2px solid var(--border);border-radius:9px;padding:6px 10px;font-size:12px;font-family:var(--font);outline:none"><option value="">Semua Kelas</option>${DB.kelas.filter(k=>myKls.includes(k.id)).map(k=>`<option value="${k.id}">${k.nama}</option>`).join('')}</select>
-        <select id="rm-list-jenis" onchange="goPage('remedial')" style="border:2px solid var(--border);border-radius:9px;padding:6px 10px;font-size:12px;font-family:var(--font);outline:none"><option value="">Semua</option><option value="remedial">Remedial</option><option value="pengayaan">Pengayaan</option></select>
-      </div>
-    </div>
-    <div class="tbl-wrap"><table><thead><tr><th>Jenis</th><th>Kelas</th><th>Mapel</th><th>Tgl Pelaks.</th><th style="text-align:center">Siswa</th><th>Status</th><th>Aksi</th></tr></thead>
-    <tbody>${progTbl||'<tr><td colspan="7" class="tbl-empty">Belum ada program</td></tr>'}</tbody></table></div>
-  </div>`;
-}
-
-// FIX #7: Enable langkah button when metode selected
-function rmMetodeChg(){
-  const metode=$('rm-metode')?.value;
-  const btn=$('btn-gen-langkah'),hint=$('gen-langkah-hint');
-  if(btn){btn.disabled=!metode;}
-  if(hint)hint.textContent=metode?`Generate langkah untuk metode: ${metode}`:'Pilih metode terlebih dahulu';
-}
-
-let _rmData={kid:0,mid:0,tid:0,waktu:'',siswaList:[],nilaiList:[],kktp:0,namaTP:''};
-function rmUpdMapel(){
-  const kid=+$('rm-kls')?.value;const sel=$('rm-mp');if(!sel)return;
-  sel.innerHTML='<option value="">-- Pilih --</option>'+DB.mapel.filter(m=>m.kelasId===kid).map(m=>`<option value="${m.id}">${m.nama}</option>`).join('');
-  $('rm-tp').innerHTML='<option value="">-- Semua TP --</option>';
-  $('rm-analisis-wrap').style.display='none';
-  $('rm-log-wrap').style.display='none';
-}
-function rmUpdTP(){
-  const kid=+$('rm-kls')?.value,mid=+$('rm-mp')?.value;const sel=$('rm-tp');if(!sel)return;
-  const tps=DB.tujuan.filter(t=>t.kelasId===kid&&t.mapelId===mid);
-  sel.innerHTML='<option value="">-- Semua TP --</option>'+tps.map(t=>`<option value="${t.id}">${t.tp.slice(0,60)}</option>`).join('');
-  // FIX #5: Show asesmen log for the selected class+mapel
-  rmShowLog(kid,mid);
-}
-
-// FIX #5: Show asesmen log dengan tombol Tampilkan Analisis
-function rmShowLog(kid,mid){
-  if(!kid||!mid){$('rm-log-wrap').style.display='none';return;}
-  const sw=DB.siswa.filter(s=>s.kelasId===kid);
-  const logMap={};
-  DB.nilaiMapel.forEach(n=>{
-    if(n.mapelId!==mid||!sw.some(s=>s.id===n.siswaId))return;
-    const key=[n.tgl,n.waktu||'',n.jenis||''].join('|');
-    if(!logMap[key])logMap[key]={tgl:n.tgl,waktu:n.waktu||'—',jenis:n.jenis||'—',count:0};
-    logMap[key].count++;
-  });
-  // Also add quiz
-  DB.hasilQuiz.forEach(hq=>{
-    if(hq.mapelId!==mid||!sw.some(s=>s.id===hq.siswaId))return;
-    const key=[hq.tgl,'Online','Bank Soal Online'].join('|');
-    if(!logMap[key])logMap[key]={tgl:hq.tgl,waktu:'Online',jenis:'Bank Soal Online',count:0,isQuiz:true};
-    logMap[key].count++;
-  });
-  const logList=Object.values(logMap).sort((a,b)=>(b.tgl||'').localeCompare(a.tgl||''));
-  if(!logList.length){$('rm-log-wrap').style.display='none';return;}
-  const wrap=$('rm-log-list');
-  wrap.innerHTML=logList.map((l,i)=>`
-    <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;margin-bottom:6px;background:#fff">
-      <span style="font-size:18px">${l.isQuiz?'🌐':'📝'}</span>
-      <div style="flex:1">
-        <div style="font-weight:700;font-size:12px">${fmtD(l.tgl)} • ${l.waktu}</div>
-        <div style="font-size:11px;color:var(--gray)">${l.jenis} • ${l.count} siswa ${l.isQuiz?'<span class="badge bg-orange" style="font-size:9px">Online</span>':''}</div>
-      </div>
-      <button class="btn btn-primary btn-sm" onclick="rmLoadFromLog('${l.tgl}','${l.waktu}','${l.jenis}')">▶ Tampilkan Analisis</button>
-    </div>`).join('');
-  $('rm-log-wrap').style.display='block';
-}
-
-function rmLoadFromLog(tgl,waktu,jenis){
-  const waktuSel=$('rm-waktu');if(waktuSel&&waktu!=='Online')waktuSel.value=waktu;
-  rmLoad(tgl,waktu);
-}
-
-function rmLoad(forceTgl,forceWaktu){
-  const kid=+$('rm-kls')?.value,mid=+$('rm-mp')?.value;
-  const tid=+$('rm-tp')?.value||0;
-  const waktu=forceWaktu||$('rm-waktu')?.value;
-  if(!kid||!mid){toast('Pilih Kelas dan Mapel!','err');return;}
-  const sw=DB.siswa.filter(s=>s.kelasId===kid);if(!sw.length){toast('Tidak ada siswa!','err');return;}
-  const tps=DB.tujuan.filter(t=>t.kelasId===kid&&t.mapelId===mid&&(!tid||t.id===tid));
-  const kktpAvg=tps.length?tps.reduce((a,t)=>a+(+t.kktp||75),0)/tps.length:75;
-  let nr=DB.nilaiMapel.filter(n=>{
-    if(n.mapelId!==mid)return false;if(!sw.some(s=>s.id===n.siswaId))return false;
-    if(waktu&&waktu!=='Online'&&n.waktu!==waktu)return false;
-    if(tid){const nTids=Array.isArray(n.tujuanIds)?n.tujuanIds:(n.tujuanId?[n.tujuanId]:[]);if(!nTids.includes(tid))return false;}
-    if(forceTgl&&n.tgl!==forceTgl)return false;
-    return true;
-  });
-  if(!nr.length){toast('Belum ada data nilai untuk filter ini!','inf');return;}
-  const swData=sw.map(s=>{const vals=nr.filter(n=>n.siswaId===s.id).map(n=>+n.nilai).filter(v=>v>0);const avg=vals.length?Math.round(vals.reduce((a,b)=>a+b,0)/vals.length):null;return{...s,avg,tuntas:avg!==null&&avg>=kktpAvg};});
-  const tpNama=tid?gTujuan(tid).tp:'Semua TP';
-  _rmData={kid,mid,tid,waktu:waktu||'',siswaList:swData,nilaiList:nr,kktp:Math.round(kktpAvg),namaTP:tpNama};
-  const total=swData.length,tuntas=swData.filter(s=>s.tuntas&&s.avg!==null).length;
-  const blm=swData.filter(s=>!s.tuntas&&s.avg!==null).length;
-  const avgKls=swData.filter(s=>s.avg!==null).length?Math.round(swData.filter(s=>s.avg!==null).reduce((a,s)=>a+s.avg,0)/swData.filter(s=>s.avg!==null).length):0;
-  $('rm-stats').innerHTML=[{l:'Total Siswa',v:total,c:'var(--blue)',i:'👧'},{l:'Belum Tuntas→Remedial',v:blm,c:'var(--red)',i:'🔴'},{l:'Tuntas→Pengayaan',v:tuntas,c:'#16a34a',i:'🟢'},{l:'Rata-rata Kelas',v:avgKls||'—',c:'#7c3aed',i:'📊'}].map(s=>`<div class="rm-stat" style="background:${s.c}15;border:1.5px solid ${s.c}40"><div style="font-size:22px">${s.i}</div><div><div style="font-size:22px;font-weight:900;color:${s.c}">${s.v}</div><div style="font-size:10px;font-weight:700;color:${s.c};opacity:.8">${s.l}</div></div></div>`).join('');
-  const thead=`<thead><tr style="background:linear-gradient(90deg,var(--dark),var(--blue))"><th style="color:#fff;padding:9px 11px">No</th><th style="color:#fff;padding:9px 11px">NIS</th><th style="color:#fff;padding:9px 11px">Nama</th><th style="color:#fff;padding:9px 11px;text-align:center">Nilai</th><th style="color:#fff;padding:9px 11px;text-align:center">KKTP</th><th style="color:#fff;padding:9px 11px;text-align:center">Status</th><th style="color:#fff;padding:9px 11px;text-align:center">Tindak Lanjut</th></tr></thead>`;
-  const tbody='<tbody>'+swData.map((s,i)=>{
-    const clr=s.avg===null?'#94a3b8':s.tuntas?'#16a34a':'var(--red)';
-    const badge=s.avg===null?'<span style="color:#94a3b8;font-size:11px">Belum Dinilai</span>':s.tuntas?'<span class="badge bg-green">Tuntas</span>':'<span class="badge bg-red">Belum Tuntas</span>';
-    const tl=s.avg===null?'—':s.tuntas?'<span style="color:#16a34a;font-size:11px;font-weight:700">🟢 Pengayaan</span>':'<span style="color:var(--red);font-size:11px;font-weight:700">🔴 Remedial</span>';
-    return`<tr style="background:${i%2?'#f8faff':'#fff'}"><td style="padding:8px 11px">${i+1}</td><td style="padding:8px 11px;font-size:11px;color:var(--gray)">${s.nis}</td><td style="padding:8px 11px;font-weight:700">${s.nama}</td><td style="padding:8px 11px;text-align:center;font-weight:900;font-size:14px;color:${clr}">${s.avg??'—'}</td><td style="padding:8px 11px;text-align:center;color:var(--gray);font-weight:600">${_rmData.kktp}</td><td style="padding:8px 11px;text-align:center">${badge}</td><td style="padding:8px 11px;text-align:center">${tl}</td></tr>`;
-  }).join('')+'</tbody>';
-  $('tbl-rm-analisis').innerHTML=thead+tbody;
-  const btnR=$('btn-rm-remedial'),btnP=$('btn-rm-pengayaan');
-  if(btnR){btnR.style.display=blm>0?'inline-flex':'none';btnR.textContent=`🔴 Buat Remedial (${blm} siswa)`;}
-  if(btnP){btnP.style.display=tuntas>0?'inline-flex':'none';btnP.textContent=`🟢 Buat Pengayaan (${tuntas} siswa)`;}
-  $('rm-analisis-wrap').style.display='block';
-}
-
-// FIX #6: AI Generate Materi
-async function rmGenMateri(){
-  const d=_rmData;const tp=d.tid?gTujuan(d.tid):null;const mp=gMapel(d.mid);
-  const btn=$('btn-gen-materi');if(btn){btn.disabled=true;btn.textContent='⏳...';}
-  try{
-    const prompt=`Buat deskripsi singkat materi yang perlu diremediasi untuk:\n- Mata Pelajaran: ${mp.nama}\n- Tujuan Pelajaran: ${tp&&tp.tp!=='—'?tp.tp:'(umum)'}\n- KKTP: ${d.kktp}\nTuliskan materi remediasi dalam 2-3 kalimat yang jelas dan fokus. Hanya tulis materinya saja.`;
-    const result=await callClaudeAPI(prompt);
-    const el=$('rm-materi');if(el)el.value=result.trim();toast('✅ Materi digenerate!','ok');
-  }catch(e){toast('❌ Gagal: '+e.message,'err');}
-  finally{if(btn){btn.disabled=false;btn.textContent='✨ Generate AI Materi';}}
-}
-
-// FIX #7: AI Generate Langkah (based on metode)
-async function rmGenLangkah(){
-  const metode=$('rm-metode')?.value;if(!metode){toast('Pilih metode dulu!','err');return;}
-  const d=_rmData;const mp=gMapel(d.mid);const materi=$('rm-materi')?.value||'';
-  const btn=$('btn-gen-langkah');if(btn){btn.disabled=true;btn.textContent='⏳...';}
-  try{
-    const prompt=`Buat langkah-langkah kegiatan remedial untuk:\n- Metode: ${metode}\n- Mata Pelajaran: ${mp.nama}\n- Materi: ${materi||'(umum)'}\nBuat 4-6 langkah yang praktis dan urut. Format dengan nomor (1. 2. dst). Hanya tulis langkahnya saja.`;
-    const result=await callClaudeAPI(prompt);
-    const el=$('rm-langkah');if(el)el.value=result.trim();toast('✅ Langkah digenerate!','ok');
-  }catch(e){toast('❌ Gagal: '+e.message,'err');}
-  finally{if(btn){btn.disabled=false;btn.textContent='✨ Generate AI Langkah';}}
-}
-
-// FIX #8: AI Generate Alat/Sumber
-async function rmGenSumber(){
-  const langkah=$('rm-langkah')?.value||'';const metode=$('rm-metode')?.value||'';const mp=gMapel(_rmData.mid);
-  const btn=$('btn-gen-sumber');if(btn){btn.disabled=true;btn.textContent='⏳...';}
-  try{
-    const prompt=`Buat daftar alat dan sumber belajar yang dibutuhkan untuk kegiatan remedial:\n- Metode: ${metode}\n- Mata Pelajaran: ${mp.nama}\n- Langkah: ${langkah.slice(0,200)||'(umum)'}\nTuliskan dalam format singkat, pisahkan dengan koma. Hanya daftarnya saja.`;
-    const result=await callClaudeAPI(prompt);
-    const el=$('rm-sumber');if(el)el.value=result.trim();toast('✅ Sumber digenerate!','ok');
-  }catch(e){toast('❌ Gagal: '+e.message,'err');}
-  finally{if(btn){btn.disabled=false;btn.textContent='✨ Generate AI Sumber';}}
-}
-
-function rmBuatProgram(jenis){
-  const d=_rmData;if(!d.kid||!d.mid){toast('Lakukan analisis dulu!','err');return;}
-  const listSw=jenis==='remedial'?d.siswaList.filter(s=>s.avg!==null&&!s.tuntas):d.siswaList.filter(s=>s.avg!==null&&s.tuntas);
-  if(!listSw.length){toast('Tidak ada siswa untuk program ini!','inf');return;}
-  const tblId=jenis==='remedial'?'tbl-rm-siswa-r':'tbl-rm-siswa-p';
-  const colExtra=jenis==='remedial'?'<th style="text-align:center;color:#fff">Selisih</th>':'';
-  document.getElementById(tblId).innerHTML=`<thead><tr style="background:${jenis==='remedial'?'var(--red)':'#16a34a'}"><th style="color:#fff;padding:6px 8px">No</th><th style="color:#fff">NIS</th><th style="color:#fff">Nama</th><th style="text-align:center;color:#fff">Nilai</th><th style="text-align:center;color:#fff">KKTP</th>${colExtra}</tr></thead><tbody>`+listSw.map((s,i)=>`<tr><td style="padding:6px 8px">${i+1}</td><td style="font-size:11px;color:var(--gray)">${s.nis}</td><td style="font-weight:700">${s.nama}</td><td style="text-align:center;font-weight:900;color:${jenis==='remedial'?'var(--red)':'#16a34a'}">${s.avg}</td><td style="text-align:center;color:var(--gray)">${d.kktp}</td>${jenis==='remedial'?`<td style="text-align:center;color:var(--red);font-weight:700">${s.avg-d.kktp}</td>`:''}</tr>`).join('')+'</tbody>';
-  const tglEl=jenis==='remedial'?$('rm-tgl-pelaks'):$('py-tgl-pelaks');if(tglEl&&!tglEl.value)tglEl.value=todayStr();
-  const frmId=jenis==='remedial'?'rm-form-remedial':'rm-form-pengayaan';
-  document.getElementById(frmId).style.display='block';
-  document.getElementById(frmId).scrollIntoView({behavior:'smooth',block:'start'});
-}
-async function rmSimpanProgram(jenis){
-  const d=_rmData;if(!d.kid||!d.mid){toast('Data analisis tidak lengkap!','err');return;}
-  const mp=gMapel(d.mid),kls=gKelas(d.kid),tp=d.tid?gTujuan(d.tid):{tp:'Semua TP'};
-  const listSw=jenis==='remedial'?d.siswaList.filter(s=>s.avg!==null&&!s.tuntas):d.siswaList.filter(s=>s.avg!==null&&s.tuntas);
-  const siswaIds=listSw.map(s=>s.id);
-  const siswaData=listSw.map(s=>({id:s.id,nama:s.nama,nis:s.nis,nilaiAwal:s.avg}));
-  if(jenis==='remedial'){
-    const tglP=$('rm-tgl-pelaks')?.value;if(!tglP){toast('Isi tanggal!','err');return;}
-    const materi=$('rm-materi')?.value.trim();if(!materi){toast('Isi materi!','err');return;}
-    const prog={id:gId(DB.programRemedial),kelasId:d.kid,mapelId:d.mid,tujuanId:d.tid,tglPelaksanaan:tglP,metode:$('rm-metode')?.value,materi,langkah:$('rm-langkah')?.value,sumber:$('rm-sumber')?.value,kktp:d.kktp,siswaIds,siswaData,namaKelas:kls.nama,namaMapel:mp.nama,namaTP:tp.tp||'',createdAt:todayStr(),status:'terjadwal'};
-    DB.programRemedial.push(prog);
-    siswaIds.forEach(sid=>{if(!DB.nilaiRemedial.find(n=>n.programId===prog.id&&n.siswaId===sid))DB.nilaiRemedial.push({id:gId(DB.nilaiRemedial),programId:prog.id,siswaId:sid,nilaiAwal:listSw.find(s=>s.id===sid)?.avg||0,nilaiHasil:null,status:'',keterangan:''});});
-  }else{
-    const tglP=$('py-tgl-pelaks')?.value;if(!tglP){toast('Isi tanggal!','err');return;}
-    const prog={id:gId(DB.programPengayaan),kelasId:d.kid,mapelId:d.mid,tujuanId:d.tid,tglPelaksanaan:tglP,bentuk:$('py-bentuk')?.value,deskripsi:$('py-deskripsi')?.value,sumber:$('py-sumber')?.value,kktp:d.kktp,siswaIds,siswaData,namaKelas:kls.nama,namaMapel:mp.nama,namaTP:tp.tp||'',createdAt:todayStr(),status:'terjadwal'};
-    DB.programPengayaan.push(prog);
-    siswaIds.forEach(sid=>{if(!DB.nilaiPengayaan.find(n=>n.programId===prog.id&&n.siswaId===sid))DB.nilaiPengayaan.push({id:gId(DB.nilaiPengayaan),programId:prog.id,siswaId:sid,nilaiAwal:listSw.find(s=>s.id===sid)?.avg||0,hasil:'',keterangan:''});});
-  }
-  toast(`✅ Program ${jenis} disimpan!`,'ok');if(STATE.gsOk)await syncToGS();goPage('remedial');
-}
-async function hapusProgram(jenis,id){
-  if(!confirm('Hapus program ini?'))return;
-  if(jenis==='remedial'){DB.programRemedial=DB.programRemedial.filter(p=>p.id!==+id);DB.nilaiRemedial=DB.nilaiRemedial.filter(n=>n.programId!==+id);}
-  else{DB.programPengayaan=DB.programPengayaan.filter(p=>p.id!==+id);DB.nilaiPengayaan=DB.nilaiPengayaan.filter(n=>n.programId!==+id);}
-  toast('Program dihapus','ok');goPage('remedial');if(STATE.gsOk)await syncToGS();
-}
-function bukaInputNilaiRM(jenis,id){
-  const prog=jenis==='remedial'?DB.programRemedial.find(p=>p.id===+id):DB.programPengayaan.find(p=>p.id===+id);
-  if(!prog){toast('Program tidak ditemukan!','err');return;}
-  openMoCrud('rm-nilai',null,buildRmNilaiForm(jenis,prog));
-}
-function buildRmNilaiForm(jenis,prog){
-  const rows=(prog.siswaData||[]).map((s,i)=>{
-    const nr=jenis==='remedial'?DB.nilaiRemedial.find(n=>n.programId===prog.id&&n.siswaId===s.id):DB.nilaiPengayaan.find(n=>n.programId===prog.id&&n.siswaId===s.id);
-    if(jenis==='remedial'){const vh=nr?.nilaiHasil||'';return`<tr><td>${i+1}</td><td style="font-size:11px;color:var(--gray)">${s.nis}</td><td style="font-weight:700">${s.nama}</td><td style="text-align:center;color:var(--red);font-weight:700">${s.nilaiAwal}</td><td style="text-align:center"><input type="number" min="0" max="100" value="${vh}" id="rmn-${s.id}" style="width:64px;padding:5px;border:2px solid var(--border);border-radius:7px;text-align:center;font-size:12px;font-family:var(--font);outline:none"></td><td><input type="text" value="${nr?.keterangan||''}" id="rmn-ket-${s.id}" placeholder="Ket..." style="width:100%;border:2px solid var(--border);border-radius:7px;padding:4px 7px;font-size:11px;font-family:var(--font);outline:none"></td></tr>`;}
-    else{const hs=nr?.hasil||'';return`<tr><td>${i+1}</td><td style="font-size:11px;color:var(--gray)">${s.nis}</td><td style="font-weight:700">${s.nama}</td><td style="text-align:center;color:#16a34a;font-weight:700">${s.nilaiAwal}</td><td><select id="rmn-${s.id}" style="border:2px solid var(--border);border-radius:7px;padding:5px 7px;font-size:12px;font-family:var(--font);outline:none"><option value="">--</option><option ${hs==='Sangat Baik'?'selected':''}>Sangat Baik</option><option ${hs==='Baik'?'selected':''}>Baik</option><option ${hs==='Cukup'?'selected':''}>Cukup</option></select></td><td><input type="text" value="${nr?.keterangan||''}" id="rmn-ket-${s.id}" placeholder="Ket..." style="width:100%;border:2px solid var(--border);border-radius:7px;padding:4px 7px;font-size:11px;font-family:var(--font);outline:none"></td></tr>`;}
-  }).join('');
-  return `<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:9px;padding:10px 13px;margin-bottom:14px;font-size:12px"><div style="font-weight:700;color:var(--blue);margin-bottom:4px">${prog.namaMapel} — ${prog.namaKelas}</div><div style="color:#475569">${jenis==='remedial'?'Metode: '+prog.metode:'Bentuk: '+prog.bentuk} • Tgl: ${fmtD(prog.tglPelaksanaan)}</div></div>
-  <div class="tbl-wrap"><table><thead><tr style="background:linear-gradient(90deg,var(--dark),${jenis==='remedial'?'var(--red)':'#16a34a'})"><th style="color:#fff;padding:7px">No</th><th style="color:#fff">NIS</th><th style="color:#fff">Nama</th><th style="color:#fff;text-align:center">Nilai Awal</th><th style="color:#fff;text-align:center">${jenis==='remedial'?'Nilai Remedial':'Hasil'}</th><th style="color:#fff">Keterangan</th></tr></thead><tbody>${rows}</tbody></table></div>
-  <div style="display:flex;gap:8px;margin-top:14px"><button class="btn btn-primary" onclick="simpanNilaiRM('${jenis}',${prog.id})">💾 Simpan Nilai</button><button class="btn btn-gray" onclick="closeMoCrud()">Batal</button></div>`;
-}
-async function simpanNilaiRM(jenis,progId){
-  const prog=jenis==='remedial'?DB.programRemedial.find(p=>p.id===+progId):DB.programPengayaan.find(p=>p.id===+progId);
-  if(!prog)return;let allDone=true;
-  (prog.siswaData||[]).forEach(s=>{
-    const valEl=$('rmn-'+s.id),ketEl=$('rmn-ket-'+s.id);if(!valEl)return;
-    if(jenis==='remedial'){
-      const arr=DB.nilaiRemedial;const idx=arr.findIndex(n=>n.programId===+progId&&n.siswaId===s.id);
-      const nh=valEl.value?+valEl.value:null;if(nh===null)allDone=false;
-      const ket=ketEl?ketEl.value:'';const status=nh!==null?(nh>=prog.kktp?'Tuntas':'Belum Tuntas'):'';
-      if(idx>=0){arr[idx]={...arr[idx],nilaiHasil:nh,status,keterangan:ket};}else arr.push({id:gId(arr),programId:+progId,siswaId:s.id,nilaiAwal:s.nilaiAwal||0,nilaiHasil:nh,status,keterangan:ket});
-    }else{
-      const arr=DB.nilaiPengayaan;const idx=arr.findIndex(n=>n.programId===+progId&&n.siswaId===s.id);
-      const hs=valEl.value;const ket=ketEl?ketEl.value:'';if(!hs)allDone=false;
-      if(idx>=0){arr[idx]={...arr[idx],hasil:hs,keterangan:ket};}else arr.push({id:gId(arr),programId:+progId,siswaId:s.id,nilaiAwal:s.nilaiAwal||0,hasil:hs,keterangan:ket});
-    }
-  });
-  const arr2=jenis==='remedial'?DB.programRemedial:DB.programPengayaan;
-  const pidx=arr2.findIndex(p=>p.id===+progId);if(pidx>=0)arr2[pidx].status=allDone?'selesai':'berlangsung';
-  closeMoCrud();toast('✅ Nilai disimpan!','ok');if(STATE.gsOk)await syncToGS();
-}
-
-// ===== LAP REMEDIAL =====
-function buildLapRemedialPage(){
-  const myKls=getAllOrGuruKelasIds();
-  const klsOpts=DB.kelas.filter(k=>myKls.includes(k.id)).map(k=>`<option value="${k.id}">${k.nama}</option>`).join('');
-  return `
-  <div class="hero-section" style="background:linear-gradient(135deg,#4c1d95,#7c3aed)">
-    <div class="hero-inner"><div class="hero-ico">🖨</div><div class="hero-txt"><h2>Laporan Remedial & Pengayaan</h2><p>Cetak & preview laporan tindak lanjut asesmen</p></div></div>
-  </div>
-  <div class="cetak-grid">
-    <div class="cetak-card">
-      <div class="cetak-card-head"><div class="cetak-card-ico" style="background:linear-gradient(135deg,var(--red),var(--red-dark))">📋</div><div><h3 style="font-weight:800;margin:0 0 3px">Program Remedial</h3><p style="font-size:11px;color:var(--gray)">Laporan per program remedial</p></div></div>
-      <div class="field"><label>Kelas</label><select id="lrm-kls" onchange="lrmUpdProg()"><option value="">-- Pilih --</option>${klsOpts}</select></div>
-      <div class="field"><label>Program</label><select id="lrm-prog"><option value="">-- Pilih --</option></select></div>
-      <div class="cetak-card-actions"><button class="btn btn-info" onclick="pvLapRM(1)">👁 Preview</button><button class="btn btn-purple" onclick="ctLapRM(1)">🖨 Cetak</button></div>
-    </div>
-    <div class="cetak-card">
-      <div class="cetak-card-head"><div class="cetak-card-ico" style="background:linear-gradient(135deg,#16a34a,#15803d)">🌟</div><div><h3 style="font-weight:800;margin:0 0 3px">Program Pengayaan</h3><p style="font-size:11px;color:var(--gray)">Laporan per program pengayaan</p></div></div>
-      <div class="field"><label>Kelas</label><select id="lpy-kls" onchange="lpyUpdProg()"><option value="">-- Pilih --</option>${klsOpts}</select></div>
-      <div class="field"><label>Program</label><select id="lpy-prog"><option value="">-- Pilih --</option></select></div>
-      <div class="cetak-card-actions"><button class="btn btn-info" onclick="pvLapRM(2)">👁 Preview</button><button class="btn btn-purple" onclick="ctLapRM(2)">🖨 Cetak</button></div>
-    </div>
-    <div class="cetak-card">
-      <div class="cetak-card-head"><div class="cetak-card-ico" style="background:linear-gradient(135deg,#0891b2,#0e7490)">📊</div><div><h3 style="font-weight:800;margin:0 0 3px">Rekap Semua Program</h3><p style="font-size:11px;color:var(--gray)">Ringkasan semua program dalam satu kelas</p></div></div>
-      <div class="field"><label>Kelas</label><select id="lrp-kls"><option value="">-- Semua --</option>${klsOpts}</select></div>
-      <div class="cetak-card-actions"><button class="btn btn-info" onclick="pvLapRM(3)">👁 Preview</button><button class="btn btn-purple" onclick="ctLapRM(3)">🖨 Cetak</button></div>
-    </div>
-  </div>`;
-}
-function lrmUpdProg(){const kid=+$('lrm-kls')?.value;$('lrm-prog').innerHTML='<option value="">-- Pilih --</option>'+DB.programRemedial.filter(p=>!kid||p.kelasId===kid).map(p=>`<option value="${p.id}">${p.namaMapel||'?'} — ${fmtD(p.tglPelaksanaan)}</option>`).join('');}
-function lpyUpdProg(){const kid=+$('lpy-kls')?.value;$('lpy-prog').innerHTML='<option value="">-- Pilih --</option>'+DB.programPengayaan.filter(p=>!kid||p.kelasId===kid).map(p=>`<option value="${p.id}">${p.namaMapel||'?'} — ${fmtD(p.tglPelaksanaan)}</option>`).join('');}
-function pvLapRM(n){const h=bLapRM(n);if(h)showPreview(h,['','Laporan Remedial','Laporan Pengayaan','Rekap Program'][n]);}
-function ctLapRM(n){const h=bLapRM(n);if(h)openPrint(h);}
-function bLapRM(n){if(n===1)return bLapRemedial();if(n===2)return bLapPengayaan();if(n===3)return bLapRekap();return null;}
-function bLapRemedial(){
-  const id=+$('lrm-prog')?.value;const p=DB.programRemedial.find(x=>x.id===id);if(!p){toast('Pilih program!','err');return null;}
-  const w=gWali(p.kelasId);const d=new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
-  const rows=(p.siswaData||[]).map((s,i)=>{const nr=DB.nilaiRemedial.find(n=>n.programId===p.id&&n.siswaId===s.id);const nh=nr?.nilaiHasil;const st=nh!==null&&nh!==undefined?(+nh>=p.kktp?'<span class="rpt-badge rb-T">Tuntas</span>':'<span class="rpt-badge rb-BT">Belum Tuntas</span>'):'—';return`<tr style="${i%2?'background:#f0f4ff':''}"><td style="text-align:center">${i+1}</td><td style="font-size:8.5pt;color:#64748b">${s.nis}</td><td style="font-weight:700">${s.nama}</td><td style="text-align:center;color:#cc2222;font-weight:700">${s.nilaiAwal??'—'}</td><td style="text-align:center">${p.kktp}</td><td style="text-align:center;font-weight:900;color:${+nh>=(p.kktp||75)?'#16a34a':'#cc2222'}">${nh??'—'}</td><td style="text-align:center">${st}</td><td style="font-size:8pt">${nr?.keterangan||''}</td></tr>`;}).join('');
-  return `${getKop()}<div class="rpt-title">PROGRAM REMEDIAL</div><div class="rpt-sub">${p.namaMapel} — ${p.namaKelas}</div>
-  <div class="rpt-meta"><span><span class="rpt-meta-lbl">Mapel:</span><span class="rpt-meta-val">${p.namaMapel}</span></span><span><span class="rpt-meta-lbl">Metode:</span><span class="rpt-meta-val">${p.metode}</span></span><span><span class="rpt-meta-lbl">Tgl:</span><span class="rpt-meta-val">${fmtD(p.tglPelaksanaan)}</span></span><span><span class="rpt-meta-lbl">KKTP:</span><span class="rpt-meta-val">${p.kktp}</span></span></div>
-  ${p.materi?`<div style="margin-bottom:10px;font-size:9pt"><strong>Materi:</strong> ${p.materi}</div>`:''}
-  ${p.langkah?`<div style="margin-bottom:10px;font-size:9pt;white-space:pre-line"><strong>Langkah:</strong><br>${p.langkah}</div>`:''}
-  <table class="rpt-table"><thead><tr><th style="text-align:center">No</th><th>NIS</th><th>Nama</th><th style="text-align:center">Nilai Awal</th><th style="text-align:center">KKTP</th><th style="text-align:center">Nilai Remedial</th><th style="text-align:center">Status</th><th>Ket</th></tr></thead><tbody>${rows}</tbody></table>
-  <div class="rpt-sign-row"><div class="sign-block"><div style="font-size:9pt">Raja, ${d}</div><div style="font-size:9pt">Guru Mata Pelajaran,</div><div class="sign-blank"></div><div class="sign-name">${w.nama}</div><div class="sign-nip">NIP. ${w.nip||'—'}</div></div><div class="sign-block"><div style="font-size:9pt">Mengetahui,</div><div style="font-size:9pt">Kepala Sekolah,</div><div class="sign-blank"></div><div class="sign-name">${DB.sekolah.kepala}</div><div class="sign-nip">NIP. ${DB.sekolah.nip||'—'}</div></div></div>`;
-}
-function bLapPengayaan(){
-  const id=+$('lpy-prog')?.value;const p=DB.programPengayaan.find(x=>x.id===id);if(!p){toast('Pilih program!','err');return null;}
-  const w=gWali(p.kelasId);const d=new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
-  const rows=(p.siswaData||[]).map((s,i)=>{const nr=DB.nilaiPengayaan.find(n=>n.programId===p.id&&n.siswaId===s.id);const hsBadge=nr?.hasil?`<span class="rpt-badge" style="background:${nr.hasil==='Sangat Baik'?'#16a34a':'#1565c0'}">${nr.hasil}</span>`:'—';return`<tr style="${i%2?'background:#f0fdf4':''}"><td style="text-align:center">${i+1}</td><td style="font-size:8.5pt;color:#555">${s.nis}</td><td style="font-weight:700">${s.nama}</td><td style="text-align:center;color:#16a34a;font-weight:700">${s.nilaiAwal??'—'}</td><td style="text-align:center">${hsBadge}</td><td style="font-size:8pt">${nr?.keterangan||''}</td></tr>`;}).join('');
-  return `${getKop()}<div class="rpt-title">PROGRAM PENGAYAAN</div><div class="rpt-sub">${p.namaMapel} — ${p.namaKelas}</div>
-  <div class="rpt-meta"><span><span class="rpt-meta-lbl">Bentuk:</span><span class="rpt-meta-val">${p.bentuk}</span></span><span><span class="rpt-meta-lbl">Tgl:</span><span class="rpt-meta-val">${fmtD(p.tglPelaksanaan)}</span></span></div>
-  <table class="rpt-table"><thead><tr><th>No</th><th>NIS</th><th>Nama</th><th style="text-align:center">Nilai Awal</th><th style="text-align:center">Hasil</th><th>Ket</th></tr></thead><tbody>${rows}</tbody></table>
-  <div class="rpt-sign-row"><div class="sign-block"><div style="font-size:9pt">Raja, ${d}</div><div style="font-size:9pt">Guru Mata Pelajaran,</div><div class="sign-blank"></div><div class="sign-name">${w.nama}</div><div class="sign-nip">NIP. ${w.nip||'—'}</div></div><div class="sign-block"><div style="font-size:9pt">Mengetahui,</div><div style="font-size:9pt">Kepala Sekolah,</div><div class="sign-blank"></div><div class="sign-name">${DB.sekolah.kepala}</div><div class="sign-nip">NIP. ${DB.sekolah.nip||'—'}</div></div></div>`;
-}
-function bLapRekap(){
-  const kid=+$('lrp-kls')?.value||0;const allR=DB.programRemedial.filter(p=>!kid||p.kelasId===kid);const allP=DB.programPengayaan.filter(p=>!kid||p.kelasId===kid);
-  const d=new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
-  const rRows=allR.map((p,i)=>{const tuntas=DB.nilaiRemedial.filter(n=>n.programId===p.id&&n.status==='Tuntas').length;const blm=DB.nilaiRemedial.filter(n=>n.programId===p.id&&n.status==='Belum Tuntas').length;return`<tr style="${i%2?'background:#fff9f9':''}"><td style="text-align:center">${i+1}</td><td style="font-weight:700">${p.namaKelas}</td><td>${p.namaMapel}</td><td style="font-size:8pt">${fmtD(p.tglPelaksanaan)}</td><td style="font-size:8pt">${p.metode}</td><td style="text-align:center">${(p.siswaIds||[]).length}</td><td style="text-align:center;color:#16a34a;font-weight:700">${tuntas}</td><td style="text-align:center;color:#cc2222;font-weight:700">${blm}</td></tr>`;}).join('');
-  const pRows=allP.map((p,i)=>{const sb=DB.nilaiPengayaan.filter(n=>n.programId===p.id&&n.hasil==='Sangat Baik').length;return`<tr style="${i%2?'background:#f0fdf4':''}"><td style="text-align:center">${i+1}</td><td style="font-weight:700">${p.namaKelas}</td><td>${p.namaMapel}</td><td style="font-size:8pt">${fmtD(p.tglPelaksanaan)}</td><td style="font-size:8pt">${p.bentuk}</td><td style="text-align:center">${(p.siswaIds||[]).length}</td><td style="text-align:center;color:#16a34a;font-weight:700">${sb}</td></tr>`;}).join('');
-  return `${getKop()}<div class="rpt-title">REKAP PROGRAM REMEDIAL & PENGAYAAN</div><div class="rpt-sub">${kid?gKelas(kid).nama:'Semua Kelas'}</div>
-  <div style="font-size:10pt;font-weight:800;color:#cc2222;margin:14px 0 6px;padding:5px 10px;background:#fff1f2;border-radius:5px;border-left:4px solid #cc2222">A. PROGRAM REMEDIAL (${allR.length})</div>
-  ${allR.length?`<table class="rpt-table"><thead><tr><th>No</th><th>Kelas</th><th>Mapel</th><th>Tgl</th><th>Metode</th><th style="text-align:center">Jml</th><th style="text-align:center">Tuntas</th><th style="text-align:center">Belum</th></tr></thead><tbody>${rRows}</tbody></table>`:'<p style="color:#aaa;font-size:9pt;padding:8px">Belum ada program remedial</p>'}
-  <div style="font-size:10pt;font-weight:800;color:#16a34a;margin:14px 0 6px;padding:5px 10px;background:#f0fdf4;border-radius:5px;border-left:4px solid #16a34a">B. PROGRAM PENGAYAAN (${allP.length})</div>
-  ${allP.length?`<table class="rpt-table"><thead><tr><th>No</th><th>Kelas</th><th>Mapel</th><th>Tgl</th><th>Bentuk</th><th style="text-align:center">Jml</th><th style="text-align:center">Sgt Baik</th></tr></thead><tbody>${pRows}</tbody></table>`:'<p style="color:#aaa;font-size:9pt;padding:8px">Belum ada program pengayaan</p>'}
-  <div class="rpt-sign-row" style="margin-top:24px"><div class="sign-block"><div style="font-size:9pt">Raja, ${d}</div><div style="font-size:9pt">Kepala Sekolah,</div><div class="sign-blank"></div><div class="sign-name">${DB.sekolah.kepala}</div><div class="sign-nip">NIP. ${DB.sekolah.nip||'—'}</div></div></div>`;
-}
 
 // ===== MURID PAGES =====
 function getMuridPage(id){
   if(id==='dashboard')return buildMuridDash();
   if(id==='nilai-murid')return buildNilaiMurid();
-  if(id==='bank-soal-murid')return buildBankSoalMurid();
   return '<div class="card">Halaman tidak ditemukan</div>';
 }
 
 function buildMuridDash(){
   const s=DB.siswa.find(x=>x.id===STATE.activeSiswaId)||{};
-  const kls=gKelas(s.kelasId);const allNilai=DB.nilaiMapel.filter(n=>n.siswaId===s.id);
+  const kls=gKelas(s.kelasId);
+  const allNilai=DB.nilaiMapel.filter(n=>n.siswaId===s.id);
   const avg=allNilai.length?Math.round(allNilai.reduce((a,b)=>a+(+b.nilai||0),0)/allNilai.length):null;
-  const aktif=DB.pengumuman.filter(p=>p.aktif!==false&&p.aktif!=='true'||p.aktif===true||p.aktif==='true').sort((a,b)=>(a.urutan||0)-(b.urutan||0));
-  const logMap={};
+  const aktif=DB.pengumuman.filter(p=>p.aktif!==false&&p.aktif!=='false').sort((a,b)=>(a.urutan||0)-(b.urutan||0));
+  const map={};
   DB.nilaiMapel.forEach(n=>{
-    const sw=DB.siswa.find(x=>x.id===n.siswaId);if(!sw||sw.kelasId!==s.kelasId)return;
+    const sw=DB.siswa.find(x=>x.id===n.siswaId);
+    if(!sw||sw.kelasId!==s.kelasId)return;
     const tids=Array.isArray(n.tujuanIds)?n.tujuanIds:(n.tujuanId?[n.tujuanId]:[]);
     const key=[n.tgl,s.kelasId,n.mapelId,tids.join(','),n.waktu||'',n.jenis||''].join('|');
-    if(!logMap[key])logMap[key]={tgl:n.tgl,kelasId:s.kelasId,mapelId:n.mapelId,waktu:n.waktu||'—',jenis:n.jenis||'—',count:0,key};
-    logMap[key].count++;
+    if(!map[key])map[key]={tgl:n.tgl,kelasId:s.kelasId,mapelId:n.mapelId,tujuanIds:tids,waktu:n.waktu||'—',jenis:n.jenis||'—',count:0,key};
+    map[key].count++;
   });
-  const logSesi=Object.values(logMap).sort((a,b)=>(b.tgl||'').localeCompare(a.tgl||'')).slice(0,8);
+  const logSesi=Object.values(map).sort((a,b)=>(b.tgl||'').localeCompare(a.tgl||'')).slice(0,8);
   return `
   <div class="ticker-wrap"><div class="ticker-badge">📢 INFO</div><div class="ticker-track"><div class="ticker-txt" id="ticker-txt"><span id="ticker-t1">${aktif.length?aktif.map(p=>p.teks).join('  ◆  ')+'  ◆  ':'Selamat datang di Aplikasi Penilaian SDN-1 Raja  ◆  '}</span><span id="ticker-t2" aria-hidden="true">${aktif.length?aktif.map(p=>p.teks).join('  ◆  ')+'  ◆  ':'Selamat datang di Aplikasi Penilaian SDN-1 Raja  ◆  '}</span></div></div></div>
   <div class="card" style="background:linear-gradient(135deg,#E6A800,#cc9900,#1565C0);border:none;margin-bottom:16px">
     <div style="display:flex;align-items:center;gap:14px">
       <div style="width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900;color:#fff;flex-shrink:0">${(s.nama||'?').charAt(0)}</div>
-      <div style="flex:1"><div style="color:#fff;font-weight:900;font-size:1.1rem">${s.nama||'—'}</div><div style="color:rgba(255,255,255,.75);font-size:11px">NIS: ${s.nis||'—'} • ${kls.nama||'—'}</div><div style="color:rgba(255,255,255,.6);font-size:11px;margin-top:2px">Wali Kelas: ${gWali(s.kelasId).nama||'—'}</div></div>
+      <div style="flex:1">
+        <div style="color:#fff;font-weight:900;font-size:1.1rem">${s.nama||'—'}</div>
+        <div style="color:rgba(255,255,255,.75);font-size:11px">NIS: ${s.nis||'—'} • ${kls.nama||'—'}</div>
+        <div style="color:rgba(255,255,255,.6);font-size:11px;margin-top:2px">Wali Kelas: ${gWali(s.kelasId).nama||'—'}</div>
+      </div>
       ${avg!==null?`<div style="text-align:right"><div style="color:#fff;font-size:2rem;font-weight:900">${avg}</div><div style="color:rgba(255,255,255,.65);font-size:11px">Rata-rata</div></div>`:''}
     </div>
   </div>
-  <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
+  <div class="stats-grid" style="grid-template-columns:repeat(2,1fr)">
     <div class="stat-card" style="background:linear-gradient(135deg,#CC2222,#991111)"><div class="stat-ico">📊</div><div><div class="stat-val">${allNilai.length}</div><div class="stat-lbl">Total Nilai</div></div></div>
     <div class="stat-card" style="background:linear-gradient(135deg,#16a34a,#15803d)"><div class="stat-ico">✅</div><div><div class="stat-val">${allNilai.filter(n=>{const tp=gTujuan(Array.isArray(n.tujuanIds)?n.tujuanIds[0]:n.tujuanId);return+n.nilai>=(tp.kktp||75);}).length}</div><div class="stat-lbl">Tuntas</div></div></div>
-    <div class="stat-card" style="background:linear-gradient(135deg,#1565C0,#0D47A1)"><div class="stat-ico">📚</div><div><div class="stat-val">${DB.bankSoal.filter(bs=>bs.kelasId===s.kelasId).length}</div><div class="stat-lbl">Bank Soal</div></div></div>
   </div>
   <div class="card">
     <div class="card-title">📋 Log Penilaian Kelas ${kls.nama||''}</div>
     <div style="font-size:12px;color:var(--gray);margin-bottom:10px">Klik untuk melihat nilai Anda</div>
     ${logSesi.length?logSesi.map(sesi=>{
-      const mp=gMapel(sesi.mapelId);const myNilai=DB.nilaiMapel.filter(n=>n.siswaId===s.id&&n.mapelId===sesi.mapelId&&n.tgl===sesi.tgl&&(!sesi.waktu||n.waktu===sesi.waktu));
+      const mp=gMapel(sesi.mapelId);
+      const myNilai=DB.nilaiMapel.filter(n=>n.siswaId===s.id&&n.mapelId===sesi.mapelId&&n.tgl===sesi.tgl&&(!sesi.waktu||n.waktu===sesi.waktu));
       const myAvg=myNilai.length?Math.round(myNilai.reduce((a,b)=>a+(+b.nilai||0),0)/myNilai.length):null;
       return `<div class="murid-log-card" onclick="muridLihatNilai('${sesi.key.replace(/'/g,"\\'")}')">
-        <div class="mlc-head"><div class="mlc-ico" style="background:linear-gradient(135deg,var(--blue),var(--blue-dark))">📖</div>
-        <div><div class="mlc-title">${mp.nama||'—'}</div><div class="mlc-sub">${fmtD(sesi.tgl)} • ${sesi.waktu}</div></div>
-        ${myAvg!==null?`<div style="margin-left:auto;font-size:1.5rem;font-weight:900;color:${myAvg>=75?'#16a34a':'var(--red)'}">${myAvg}</div>`:'<div style="margin-left:auto;font-size:12px;color:var(--gray)">Belum dinilai</div>'}
-        </div><div style="font-size:11px;color:var(--gray)">${sesi.jenis} • ${sesi.count} siswa dinilai</div>
+        <div class="mlc-head">
+          <div class="mlc-ico" style="background:linear-gradient(135deg,var(--blue),var(--blue-dark))">📖</div>
+          <div><div class="mlc-title">${mp.nama||'—'}</div><div class="mlc-sub">${fmtD(sesi.tgl)} • ${sesi.waktu}</div></div>
+          ${myAvg!==null?`<div style="margin-left:auto;font-size:1.5rem;font-weight:900;color:${myAvg>=75?'#16a34a':'var(--red)'}">${myAvg}</div>`:'<div style="margin-left:auto;font-size:12px;color:var(--gray)">Belum dinilai</div>'}
+        </div>
+        <div style="font-size:11px;color:var(--gray)">${sesi.jenis} • ${sesi.count} siswa dinilai</div>
       </div>`;
     }).join(''):'<div style="text-align:center;color:var(--gray);padding:20px">Belum ada data penilaian</div>'}
   </div>`;
@@ -1948,7 +1339,9 @@ function buildMuridDash(){
 
 function muridLihatNilai(key){
   const s=DB.siswa.find(x=>x.id===STATE.activeSiswaId)||{};
-  const parts=key.split('|');const tgl=parts[0],mid=+parts[2];const mp=gMapel(mid);
+  const parts=key.split('|');
+  const tgl=parts[0],mid=+parts[2],waktu=parts[4];
+  const mp=gMapel(mid);
   const myNilai=DB.nilaiMapel.filter(n=>n.siswaId===s.id&&n.mapelId===mid&&n.tgl===tgl);
   if(!myNilai.length){toast('Belum ada nilai untuk penilaian ini','inf');return;}
   const rows=myNilai.map(n=>{
@@ -1965,7 +1358,8 @@ function muridLihatNilai(key){
       <div style="flex:1"><div style="color:#fff;font-weight:800;font-size:15px">${s.nama}</div><div style="color:rgba(255,255,255,.7);font-size:11px">${mp.nama} • ${fmtD(tgl)}</div></div>
       <div style="text-align:right"><div style="color:var(--yellow);font-size:28px;font-weight:900">${avg}</div><div style="color:rgba(255,255,255,.6);font-size:10px">Rata-rata</div></div>
     </div>
-    <div class="tbl-wrap"><table><thead><tr><th>Tujuan Pelajaran</th><th style="text-align:center">Nilai</th><th style="text-align:center">KKTP</th><th style="text-align:center">Status</th></tr></thead><tbody>${rows}</tbody></table></div>`);
+    <div class="tbl-wrap"><table><thead><tr><th>Tujuan Pelajaran</th><th style="text-align:center">Nilai</th><th style="text-align:center">KKTP</th><th style="text-align:center">Status</th></tr></thead><tbody>${rows}</tbody></table></div>
+  `);
 }
 
 function buildNilaiMurid(){
@@ -1976,8 +1370,10 @@ function buildNilaiMurid(){
   myNilai.sort((a,b)=>(b.tgl||'').localeCompare(a.tgl||''));
   const allAvg=myNilai.length?Math.round(myNilai.reduce((a,b)=>a+(+b.nilai||0),0)/myNilai.length):null;
   const rows=myNilai.map((n,i)=>{
-    const mp=gMapel(n.mapelId);const tids=Array.isArray(n.tujuanIds)?n.tujuanIds:(n.tujuanId?[n.tujuanId]:[]);
-    const tp=tids.length?gTujuan(tids[0]):{tp:'—',kktp:75};const nc=+n.nilai>=85?'#16a34a':+n.nilai>=70?'var(--blue)':'var(--red)';
+    const mp=gMapel(n.mapelId);
+    const tids=Array.isArray(n.tujuanIds)?n.tujuanIds:(n.tujuanId?[n.tujuanId]:[]);
+    const tp=tids.length?gTujuan(tids[0]):{tp:'—',kktp:75};
+    const nc=+n.nilai>=85?'#16a34a':+n.nilai>=70?'var(--blue)':'var(--red)';
     const st=+n.nilai>=(tp.kktp||75)?'<span class="badge bg-green">T</span>':'<span class="badge bg-red">BT</span>';
     return`<tr style="${i%2?'background:#f8faff':''}"><td style="white-space:nowrap;font-size:11px;color:var(--blue)">${fmtD(n.tgl)}</td><td style="font-weight:600">${mp.nama||'—'}</td><td style="font-size:11px;color:var(--gray);max-width:150px">${tp.tp||'—'}</td><td style="text-align:center"><span class="badge bg-blue" style="font-size:10px">${n.waktu||'—'}</span></td><td style="text-align:center;font-weight:900;color:${nc};font-size:15px">${n.nilai}</td><td style="text-align:center">${st}</td></tr>`;
   }).join('');
@@ -1986,137 +1382,10 @@ function buildNilaiMurid(){
     <select id="f-nm-mp" onchange="goPage('nilai-murid')"><option value="">Semua Mapel</option>${DB.mapel.filter(m=>m.kelasId===s.kelasId).map(m=>`<option value="${m.id}"${filterMp===m.id?' selected':''}>${m.nama}</option>`).join('')}</select>
     ${allAvg!==null?`<div style="background:var(--blue);color:#fff;padding:5px 14px;border-radius:20px;font-size:13px;font-weight:800">Rata-rata: ${allAvg}</div>`:''}
   </div>
-  <div class="tbl-wrap"><table><thead><tr><th>Tanggal</th><th>Mapel</th><th>Tujuan Pelajaran</th><th>Waktu</th><th style="text-align:center">Nilai</th><th style="text-align:center">Status</th></tr></thead>
-  <tbody>${rows||'<tr><td colspan="6" class="tbl-empty">Belum ada nilai</td></tr>'}</tbody></table></div>`;
-}
-
-// FIX #13: Murid Bank Soal - compact grouped view with quiz + nilai
-function buildBankSoalMurid(){
-  const s=DB.siswa.find(x=>x.id===STATE.activeSiswaId)||{};
-  const filterMp=$('f-bsm-mp')?+$('f-bsm-mp').value:0;
-  let soals=DB.bankSoal.filter(x=>x.kelasId===s.kelasId||!x.kelasId);
-  if(filterMp)soals=soals.filter(x=>x.mapelId===filterMp);
-  
-  // Group by mapel + tanggal
-  const groups={};
-  soals.forEach(bs=>{
-    const key=`${bs.mapelId}|${bs.createdAt||''}`;
-    if(!groups[key])groups[key]={mapelId:bs.mapelId,createdAt:bs.createdAt||'',soals:[]};
-    groups[key].soals.push(bs);
-  });
-  const groupList=Object.values(groups).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
-  
-  const cards=groupList.map((g,gi)=>{
-    const mp=gMapel(g.mapelId);
-    // Check if already done quiz for this group
-    const groupKey=`${s.id}|${g.mapelId}|${g.createdAt||''}`;
-    const hq=DB.hasilQuiz.find(h=>h.siswaId===s.id&&h.mapelId===g.mapelId&&h.tgl===(g.createdAt||''));
-    const isDone=!!hq;
-    const nilaiHq=isDone?hq.nilai:null;
-    const gBodyId='bsm-g-'+gi;
-    return `<div class="bs-group" style="${isDone?'border-color:#16a34a':''}">
-      <div class="bs-group-head" onclick="toggleBsGroup('${gBodyId}')">
-        <div style="width:38px;height:38px;border-radius:10px;background:${isDone?'linear-gradient(135deg,#16a34a,#15803d)':'linear-gradient(135deg,#cc2222,#991111)'};display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0">${isDone?'✅':'📝'}</div>
-        <div style="flex:1">
-          <div style="font-weight:800;font-size:13px">${mp.nama||'—'}</div>
-          <div style="font-size:11px;color:var(--gray)">${g.soals.length} soal ${g.createdAt?'• '+fmtD(g.createdAt):''}</div>
-        </div>
-        <div style="text-align:right;margin-right:8px">
-          ${isDone?`<div style="font-weight:900;font-size:16px;color:${nilaiHq>=75?'#16a34a':'var(--red)'}">${nilaiHq}</div><div style="font-size:10px;color:var(--gray)">Nilai</div>`:
-          '<span class="badge bg-gray" style="font-size:10px">Belum Dikerjakan</span>'}
-        </div>
-        <span style="color:var(--gray)">▼</span>
-      </div>
-      <div class="bs-group-body" id="${gBodyId}">
-        <div style="display:flex;gap:8px;margin-bottom:12px">
-          ${isDone?
-            `<button class="btn btn-info btn-sm" onclick="startQuiz(${gi})">🔄 Kerjakan Ulang</button>
-             <button class="btn btn-green btn-sm" onclick="lihatSoal(${gi})">👁 Lihat Soal & Kunci</button>`:
-            `<button class="btn btn-primary btn-sm" onclick="startQuiz(${gi})">▶ Kerjakan Sekarang</button>
-             <button class="btn btn-gray btn-sm" onclick="lihatSoal(${gi})">👁 Lihat Soal</button>`}
-        </div>
-        <div id="quiz-area-${gi}"></div>
-        <div id="soal-area-${gi}" style="display:none">
-          ${g.soals.map((bs,si)=>`
-          <div style="border:1.5px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;background:#fafcff">
-            ${bs.indikator?`<div style="font-size:11px;color:var(--gray);font-style:italic;margin-bottom:5px">📌 ${bs.indikator}</div>`:''}
-            <div style="font-size:13px;font-weight:600;line-height:1.5;margin-bottom:8px">${si+1}. ${bs.soal}</div>
-            <div>${(bs.opsi||[]).map((o,oi)=>`<div class="soal-opsi${o.kunci?' correct':''}"><div class="soal-opsi-key">${String.fromCharCode(65+oi)}</div><div style="flex:1">${o.teks}</div>${o.kunci?'<span style="font-size:12px;color:#16a34a">✓</span>':''}</div>`).join('')}</div>
-          </div>`).join('')}
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-  
-  // Store groups for quiz
-  window._bsmGroups=groupList;window._bsmSiswa=s;
-  
-  return `
-  <div class="hero-section" style="background:linear-gradient(135deg,var(--dark),var(--blue-dark))">
-    <div class="hero-inner"><div class="hero-ico">📝</div><div class="hero-txt"><h2>Bank Soal</h2><p>Kelas ${gKelas(s.kelasId).nama||'—'} • ${soals.length} soal tersedia</p></div></div>
-  </div>
-  <div class="filter-bar">
-    <select id="f-bsm-mp" onchange="goPage('bank-soal-murid')"><option value="">Semua Mapel</option>${DB.mapel.filter(m=>m.kelasId===s.kelasId).map(m=>`<option value="${m.id}"${filterMp===m.id?' selected':''}>${m.nama}</option>`).join('')}</select>
-  </div>
-  ${cards||'<div class="card" style="text-align:center;color:var(--gray);padding:36px"><div style="font-size:34px;margin-bottom:10px">📝</div><div>Belum ada soal untuk kelas ini</div></div>'}`;
-}
-
-function lihatSoal(gi){
-  const area=document.getElementById('soal-area-'+gi);if(!area)return;
-  area.style.display=area.style.display==='none'?'block':'none';
-}
-
-function startQuiz(gi){
-  const g=window._bsmGroups[gi];const s=window._bsmSiswa;if(!g||!s)return;
-  const area=document.getElementById('quiz-area-'+gi);if(!area)return;
-  const soals=g.soals;let _quizAnswers={};let _quizSubmitted=false;
-  const renderQuiz=()=>{
-    const html=soals.map((bs,si)=>{
-      const ans=_quizAnswers[bs.id];const opts=(bs.opsi||[]).map((o,oi)=>`<div class="quiz-opt${ans===oi?' sel':''}" onclick="quizSel(${gi},${bs.id},${oi},this)">${String.fromCharCode(65+oi)}. ${o.teks}</div>`).join('');
-      return`<div style="margin-bottom:14px"><div style="font-size:13px;font-weight:600;line-height:1.5;margin-bottom:8px">${si+1}. ${bs.soal}</div>${opts}</div>`;
-    }).join('');
-    area.innerHTML=`<div style="border:2px solid var(--blue);border-radius:12px;padding:14px;background:#f0f7ff">
-      <div style="font-weight:800;font-size:14px;color:var(--blue);margin-bottom:12px">🎯 Quiz — Kerjakan Soal</div>
-      <div id="quiz-soal-${gi}">${html}</div>
-      <button class="btn btn-green" style="margin-top:12px" onclick="submitQuiz(${gi})">✅ Kumpulkan Jawaban</button>
-    </div>`;
-    window._quizState=window._quizState||{};window._quizState[gi]={answers:{},soals,mapelId:g.mapelId,createdAt:g.createdAt};
-  };
-  renderQuiz();
-}
-function quizSel(gi,bsId,opIdx,el){
-  if(!window._quizState||!window._quizState[gi])return;
-  window._quizState[gi].answers[bsId]=opIdx;
-  const soalDiv=el.closest('div[style*="margin-bottom:14px"]');
-  if(soalDiv)soalDiv.querySelectorAll('.quiz-opt').forEach((o,i)=>{o.className='quiz-opt'+(i===opIdx?' sel':'');});
-}
-async function submitQuiz(gi){
-  const state=window._quizState&&window._quizState[gi];if(!state)return;
-  const s=window._bsmSiswa;const soals=state.soals;
-  let benar=0;
-  soals.forEach((bs,si)=>{const ans=state.answers[bs.id];const kunci=(bs.opsi||[]).findIndex(o=>o.kunci);if(ans===kunci&&kunci>=0)benar++;});
-  const nilai=Math.round(benar/soals.length*100);
-  const area=document.getElementById('quiz-area-'+gi);if(!area)return;
-  // Show result
-  const resultHtml=soals.map((bs,si)=>{
-    const ans=state.answers[bs.id];const kunci=(bs.opsi||[]).findIndex(o=>o.kunci);const isOk=ans===kunci&&kunci>=0;
-    const opts=(bs.opsi||[]).map((o,oi)=>`<div class="quiz-opt${oi===kunci?' ok':''} ${oi===ans&&oi!==kunci?' no':''}" style="cursor:default">${String.fromCharCode(65+oi)}. ${o.teks}${oi===kunci?' ✓':''}</div>`).join('');
-    return`<div style="margin-bottom:14px"><div style="font-size:13px;font-weight:600;line-height:1.5;margin-bottom:8px">${si+1}. ${bs.soal} ${isOk?'<span class="badge bg-green" style="font-size:10px">Benar</span>':'<span class="badge bg-red" style="font-size:10px">Salah</span>'}</div>${opts}</div>`;
-  }).join('');
-  area.innerHTML=`<div style="border:2px solid ${nilai>=75?'#16a34a':'var(--red)'};border-radius:12px;padding:14px;background:${nilai>=75?'#f0fdf4':'#fff5f5'}">
-    <div style="text-align:center;margin-bottom:14px">
-      <div style="font-size:2.5rem;font-weight:900;color:${nilai>=75?'#16a34a':'var(--red)'};">${nilai}</div>
-      <div style="font-weight:700;color:${nilai>=75?'#16a34a':'var(--red)'}">${nilai>=75?'✅ Tuntas!':'❌ Belum Tuntas'}</div>
-      <div style="font-size:12px;color:var(--gray);margin-top:4px">Benar ${benar} dari ${soals.length} soal</div>
-    </div>
-    ${resultHtml}
-    <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="startQuiz(${gi})">🔄 Coba Lagi</button>
-  </div>`;
-  // Save to DB
-  const existing=DB.hasilQuiz.findIndex(h=>h.siswaId===s.id&&h.mapelId===state.mapelId&&h.tgl===state.createdAt);
-  const rec={id:existing>=0?DB.hasilQuiz[existing].id:gId(DB.hasilQuiz),siswaId:s.id,mapelId:state.mapelId,kelasId:s.kelasId,tgl:state.createdAt||todayStr(),nilai,benar,total:soals.length,tglKerjakan:todayStr()};
-  if(existing>=0)DB.hasilQuiz[existing]=rec;else DB.hasilQuiz.push(rec);
-  if(STATE.gsOk)await syncToGS();
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Tanggal</th><th>Mapel</th><th>Tujuan Pelajaran</th><th>Waktu</th><th style="text-align:center">Nilai</th><th style="text-align:center">Status</th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="6" class="tbl-empty">Belum ada nilai</td></tr>'}</tbody>
+  </table></div>`;
 }
 
 // ===== CRUD MODAL =====
@@ -2124,8 +1393,8 @@ let _moCrudExtra=null;
 function openMoCrud(type,id,extraHtml){
   _moCrudExtra=extraHtml||null;
   const mo=$('mo-crud'),box=$('mo-crud-box'),head=$('mo-crud-head'),title=$('mo-crud-title'),body=$('mo-crud-body');
-  const L={kelas:'Kelas',guru:'Guru',siswa:'Siswa',mapel:'Mata Pelajaran',tujuan:'Tujuan Pelajaran',koku:'Kokurikuler',induk:'Data Induk',pngm:'Pengumuman','murid-nilai-detail':'Detail Nilai','rm-nilai':'Input Nilai Hasil','gen-soal':'Generate Bank Soal AI','quiz-detail':'Hasil Quiz'};
-  const colors={kelas:'linear-gradient(135deg,#1565C0,#0D47A1)',guru:'linear-gradient(135deg,#1565C0,#0D47A1)',siswa:'linear-gradient(135deg,#CC2222,#991111)',mapel:'linear-gradient(135deg,#16a34a,#15803d)',tujuan:'linear-gradient(135deg,#7c3aed,#5b21b6)',koku:'linear-gradient(135deg,#0891b2,#0e7490)',induk:'linear-gradient(135deg,#1565C0,#0D47A1)',pngm:'linear-gradient(135deg,#E6A800,#cc9900)','murid-nilai-detail':'linear-gradient(135deg,#0D1B2E,#0D47A1)','rm-nilai':'linear-gradient(135deg,#0D1B2E,#0D47A1)','gen-soal':'linear-gradient(135deg,#7c3aed,#5b21b6)','quiz-detail':'linear-gradient(135deg,#0891b2,#0e7490)'};
+  const L={kelas:'Kelas',guru:'Guru',siswa:'Siswa',mapel:'Mata Pelajaran',tujuan:'Tujuan Pelajaran',koku:'Kokurikuler',induk:'Data Induk',pngm:'Pengumuman','murid-nilai-detail':'Detail Nilai','rm-nilai':'Input Nilai Hasil','quiz-detail':'Hasil Quiz'};
+  const colors={kelas:'linear-gradient(135deg,#1565C0,#0D47A1)',guru:'linear-gradient(135deg,#1565C0,#0D47A1)',siswa:'linear-gradient(135deg,#CC2222,#991111)',mapel:'linear-gradient(135deg,#16a34a,#15803d)',tujuan:'linear-gradient(135deg,#7c3aed,#5b21b6)',koku:'linear-gradient(135deg,#0891b2,#0e7490)',induk:'linear-gradient(135deg,#1565C0,#0D47A1)',pngm:'linear-gradient(135deg,#E6A800,#cc9900)','murid-nilai-detail':'linear-gradient(135deg,#0D1B2E,#0D47A1)','rm-nilai':'linear-gradient(135deg,#0D1B2E,#0D47A1)','quiz-detail':'linear-gradient(135deg,#0891b2,#0e7490)'};
   head.style.background=colors[type]||'linear-gradient(135deg,#1565C0,#0D47A1)';
   title.textContent=(id?'Edit ':'Tambah ')+(L[type]||type);
   box.className='mo-box'+(['gen-soal','rm-nilai','quiz-detail','murid-nilai-detail'].includes(type)?' lg':'');
@@ -2193,17 +1462,7 @@ function buildCrudForm(type,id){
     return`<div class="field"><label>Kelas</label><select id="mf-kelasId"><option value="">-- Pilih --</option>${kO}</select></div><div class="field"><label>Tema</label><input type="text" id="mf-tema" value="${rec.tema||''}"></div><div class="field"><label>Judul Kegiatan</label><input type="text" id="mf-judul" value="${rec.judul||''}"></div><div class="field"><label>Elemen</label><select id="mf-elemen" onchange="kokuChgElem()"><option value="">-- Pilih --</option>${eO}</select></div><div class="field"><label>Sub Elemen</label><select id="mf-subElemen"><option value="">-- Pilih --</option>${sO}</select></div>${foot}`;
   }
   if(type==='pngm'){const p=DB.pengumuman.find(r=>r.id===+id)||{};return`<div class="field"><label>Teks Pengumuman</label><textarea id="mf-teks" rows="3" style="width:100%;border:2px solid var(--border);border-radius:9px;padding:8px 11px;font-size:13px;font-family:var(--font);outline:none;resize:vertical">${p.teks||''}</textarea></div><div class="grid2">${F('Urutan','urutan',p.urutan||1,'number','1')}<div class="field"><label>Status</label><select id="mf-aktif"><option value="true" ${(p.aktif!==false&&p.aktif!=='false')?'selected':''}>✅ Aktif</option><option value="false" ${(p.aktif===false||p.aktif==='false')?'selected':''}>❌ Nonaktif</option></select></div></div>${foot}`;}
-  if(type==='gen-soal'){
-    const g=DB.guru.find(x=>x.id===STATE.activeGuruId)||{};const myKls=getGuruKelasIds(g);
-    return `<div style="background:var(--gray-light);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--gray)">Generate banyak soal sekaligus dengan AI berdasarkan Tujuan Pelajaran</div>
-    <div class="field"><label>Kelas</label><select id="gen-kls" onchange="genUpdMp()"><option value="">-- Pilih --</option>${DB.kelas.filter(k=>myKls.includes(k.id)).map(k=>`<option value="${k.id}">${k.nama}</option>`).join('')}</select></div>
-    <div class="field"><label>Mata Pelajaran</label><select id="gen-mp" onchange="genUpdTP()"><option value="">-- Pilih --</option></select></div>
-    <div class="field"><label>Tujuan Pelajaran</label><select id="gen-tp"><option value="">-- Pilih TP --</option></select></div>
-    <div class="field"><label>Jumlah Soal</label><select id="gen-jml"><option value="3">3 soal</option><option value="5" selected>5 soal</option><option value="10">10 soal</option></select></div>
-    <div class="mo-footer"><button class="btn btn-purple" id="gen-btn" onclick="runGenBatch()">✨ Generate Soal</button><button class="btn btn-gray" onclick="closeMoCrud()">Tutup</button></div>
-    <div id="gen-progress" style="display:none;margin-top:12px"><div class="loading-spinner"><div class="spinner"></div>Generating soal dengan AI...</div></div>
-    <div id="gen-results"></div>`;
-  }
+
   return '<div style="color:var(--gray);text-align:center;padding:20px">Form tidak tersedia</div>';
 }
 
@@ -2273,7 +1532,7 @@ async function saveCrud(type,id){
 
 async function hapusData(type,id){
   if(!confirm('Hapus data ini?'))return;
-  const arrMap={kelas:'kelas',guru:'guru',siswa:'siswa',mapel:'mapel',tujuan:'tujuan',koku:'koku',pngm:'pengumuman',bs:'bankSoal'};
+  const arrMap={kelas:'kelas',guru:'guru',siswa:'siswa',mapel:'mapel',tujuan:'tujuan',koku:'koku',pngm:'pengumuman'};
   const arr=DB[arrMap[type]||type];if(!arr)return;
   const idx=arr.findIndex(r=>r.id===+id);if(idx>=0)arr.splice(idx,1);
   goPage(STATE.currentPage);toast('Data dihapus','ok');
@@ -2281,34 +1540,8 @@ async function hapusData(type,id){
 }
 
 // Gen batch AI
-function genUpdMp(){const kid=$('gen-kls')?.value;const sel=$('gen-mp');if(!sel)return;sel.innerHTML='<option value="">-- Pilih --</option>'+DB.mapel.filter(m=>!kid||m.kelasId===+kid).map(m=>`<option value="${m.id}">${m.nama}</option>`).join('');$('gen-tp').innerHTML='<option value="">-- Pilih TP --</option>';}
-function genUpdTP(){const mid=$('gen-mp')?.value;const kid=$('gen-kls')?.value;const sel=$('gen-tp');if(!sel)return;sel.innerHTML='<option value="">-- Pilih TP --</option>'+DB.tujuan.filter(t=>(!mid||t.mapelId===+mid)&&(!kid||t.kelasId===+kid)).map(t=>`<option value="${t.id}">${t.tp.slice(0,60)}</option>`).join('');}
 
-async function runGenBatch(){
-  const mid=+$('gen-mp')?.value,kid=+$('gen-kls')?.value,tid=+$('gen-tp')?.value||null;
-  const jml=+$('gen-jml')?.value||5;
-  const mp=mid?gMapel(mid):{nama:'Mata Pelajaran'};const kls=kid?gKelas(kid):{nama:'SD'};const tp=tid?gTujuan(tid):null;
-  if(!mid){toast('Pilih Mata Pelajaran dulu!','err');return;}
-  const btn=$('gen-btn');if(btn){btn.disabled=true;btn.textContent='⏳ Generating...';}
-  $('gen-progress').style.display='block';$('gen-results').innerHTML='';
-  try{
-    const prompt=`Buat ${jml} soal pilihan ganda untuk:\n- Mata Pelajaran: ${mp.nama}\n- Kelas: ${kls.nama}\n${tp?'- Tujuan Pelajaran: '+tp.tp:''}\n\nFormat JSON array (tanpa markdown/backtick):\n[{"soal":"...","opsiA":"...","opsiB":"...","opsiC":"...","opsiD":"...","kunci":"A","indikator":"..."},...]\nJawab HANYA dengan JSON array tersebut.`;
-    const result=await callClaudeAPI(prompt);
-    const clean=result.replace(/\`\`\`json?|\`\`\`/g,'').trim();
-    const arr=JSON.parse(clean);let addedCount=0;
-    const createdAt=todayStr();
-    arr.forEach(j=>{
-      if(!j.soal)return;
-      const opsi=['A','B','C','D'].map((l,i)=>({teks:j['opsi'+l]||'',gambar:'',kunci:j.kunci===l})).filter(o=>o.teks);
-      DB.bankSoal.push({id:gId(DB.bankSoal),guruId:STATE.activeGuruId,kelasId:kid,mapelId:mid,tujuanId:tid,indikator:j.indikator||'',soal:j.soal,gambarSoal:'',opsi,createdAt});
-      addedCount++;
-    });
-    $('gen-results').innerHTML=`<div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:9px;padding:12px;margin-top:12px;font-weight:700;color:#15803d">✅ ${addedCount} soal berhasil digenerate!</div>`;
-    if(STATE.gsOk)await syncToGS();
-    toast(`✅ ${addedCount} soal digenerate!`,'ok');
-  }catch(e){$('gen-results').innerHTML=`<div style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:9px;padding:12px;margin-top:12px;color:var(--red)">❌ Error: ${e.message}</div>`;}
-  finally{$('gen-progress').style.display='none';if(btn){btn.disabled=false;btn.textContent='✨ Generate Soal';}}
-}
+
 
 // ===== IMPORT/EXPORT =====
 const IMP_CFG={kelas:{cols:['id','level','nama'],example:'1,1,Kelas I-A'},guru:{cols:['id','nama','nip','tugas','kelasId'],example:'1,Ibu Sari,198501012010012001,Wali Kelas,1'},siswa:{cols:['id','nis','nama','kelasId'],example:'1,20240001,Ahmad Rizki,1'},mapel:{cols:['id','nama','kelasId'],example:'1,Matematika,1'},tujuan:{cols:['id','kelasId','mapelId','tp','kktp'],example:'1,1,1,Mengenal bilangan,70'},koku:{cols:['id','kelasId','tema','judul','elemen','subElemen'],example:'1,1,Suara Demokrasi,Pemilihan Ketua,Kreativitas,Gagasan baru'}};
