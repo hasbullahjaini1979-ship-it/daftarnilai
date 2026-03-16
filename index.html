@@ -785,7 +785,7 @@ document.querySelectorAll('#landing-logo,#header-logo').forEach(el => el.src = L
 // ===================== DATABASE =====================
 let DB = {
   sekolah:{nama:"SD Negeri-1 Raja",kepala:"—",nip:"—",kabupaten:"Kotawaringin Barat",alamat:"Jl. Pangeran Diponegoro No.31 Pangkalan Bun",tahunAjaran:"2025/2026",semester:"Semester 1",logo:LOGO_SRC},
-  kelas:[],guru:[],siswa:[],mapel:[],tujuan:[],koku:[],
+  kelas:[],guru:[],siswa:[],mapel:[],tujuan:[],koku:[],kokuProjek:[],
   nilaiMapel:[],nilaiKoku:[],pengumuman:[],
   bankSoal:[],
   programRemedial:[],nilaiRemedial:[],programPengayaan:[],nilaiPengayaan:[]
@@ -951,9 +951,10 @@ async function gsReq(body) {
   return await gsFetchPost(body);
 }
 async function syncToGS() {
+  if(!DB.kokuProjek)DB.kokuProjek=[];
   await gsReq({action:'saveAll',payload:{
     sekolah:DB.sekolah,kelas:DB.kelas,guru:DB.guru,siswa:DB.siswa,
-    mapel:DB.mapel,tujuan:DB.tujuan,koku:DB.koku,
+    mapel:DB.mapel,tujuan:DB.tujuan,koku:DB.koku,kokuProjek:DB.kokuProjek,
     nilaiMapel:DB.nilaiMapel,nilaiKoku:DB.nilaiKoku,pengumuman:DB.pengumuman,
     bankSoal:DB.bankSoal,
     programRemedial:DB.programRemedial,nilaiRemedial:DB.nilaiRemedial,
@@ -977,7 +978,7 @@ async function autoLoad() {
 function applyGsData(r) {
   if(!r) return;
   if(r.sekolah) DB.sekolah={...{nama:"SD Negeri-1 Raja",kepala:"—",nip:"—",kabupaten:"Kotawaringin Barat",alamat:"—",tahunAjaran:"2025/2026",semester:"Semester 1",logo:LOGO_SRC},...r.sekolah};
-  ['kelas','guru','siswa','mapel','tujuan','koku','nilaiMapel','nilaiKoku','pengumuman','bankSoal','programRemedial','nilaiRemedial','programPengayaan','nilaiPengayaan'].forEach(k=>{
+  ['kelas','guru','siswa','mapel','tujuan','koku','kokuProjek','nilaiMapel','nilaiKoku','pengumuman','bankSoal','programRemedial','nilaiRemedial','programPengayaan','nilaiPengayaan'].forEach(k=>{
     if(r[k]&&Array.isArray(r[k])){
       if(k==='guru'){DB[k]=r[k].map(g=>({...g,kelasIds:Array.isArray(g.kelasIds)?g.kelasIds:(typeof g.kelasIds==='string'&&g.kelasIds.startsWith('['))?JSON.parse(g.kelasIds):[],mapelIds:Array.isArray(g.mapelIds)?g.mapelIds:(typeof g.mapelIds==='string'&&g.mapelIds.startsWith('['))?JSON.parse(g.mapelIds):[]}))}
       else DB[k]=r[k];
@@ -1085,6 +1086,10 @@ const MENUS = {
     {id:'kelas',ico:'📚',lbl:'Data Kelas'},
     {id:'guru',ico:'👩‍🏫',lbl:'Data Guru'},
     {id:'siswa',ico:'👧',lbl:'Data Siswa'},
+    {sep:'Kurikulum'},
+    {id:'adm-mapel',ico:'📖',lbl:'Mata Pelajaran'},
+    {id:'adm-tujuan',ico:'🎯',lbl:'Tujuan Pelajaran'},
+    {id:'adm-koku',ico:'🌱',lbl:'Data Kokurikuler'},
   ],
   guru: [
     {id:'dashboard',ico:'📊',lbl:'Dashboard'},
@@ -1099,19 +1104,21 @@ const MENUS = {
     {sep:'Tindak Lanjut'},
     {id:'remedial',ico:'🔴',lbl:'Tindak Lanjut Asesmen'},
     {id:'lap-remedial',ico:'🖨',lbl:'Laporan Remedial'},
-    {sep:'Laporan'},
+    {sep:'Laporan & Cetak'},
     {id:'cetak',ico:'📄',lbl:'Laporan & Cetak'},
     {id:'porto',ico:'📋',lbl:'Laporan Akademik'},
+    {id:'cetak-rekap',ico:'🖨',lbl:'Cetak Rekap Nilai'},
+    {id:'cetak-porto',ico:'📰',lbl:'Cetak Portofolio'},
     {id:'log',ico:'📝',lbl:'Log Penilaian'},
     {id:'peringkat',ico:'🏆',lbl:'Peringkat'},
     {sep:'Lainnya'},
     {id:'pengumuman',ico:'📢',lbl:'Pengumuman'},
-    {id:'bank-soal',ico:'📝',lbl:'Bank Soal'},
   ],
   murid: [
     {id:'dashboard',ico:'🏠',lbl:'Dashboard'},
     {id:'nilai-murid',ico:'📊',lbl:'Nilai Saya'},
-    {id:'bank-soal-murid',ico:'📝',lbl:'Bank Soal'},
+    {id:'remedial-murid',ico:'📋',lbl:'Log Remedial & Pengayaan'},
+    {id:'porto-murid',ico:'📰',lbl:'Portofolio Saya'},
   ],
 };
 
@@ -1214,6 +1221,9 @@ function getAdminPage(id) {
   if(id==='kelas') return buildKelasPage();
   if(id==='guru') return buildGuruPage();
   if(id==='siswa') return buildSiswaPage();
+  if(id==='adm-mapel') return buildAdmMapelPage();
+  if(id==='adm-tujuan') return buildAdmTujuanPage();
+  if(id==='adm-koku') return buildAdmKokuPage();
   return '<div class="card">Halaman tidak ditemukan</div>';
 }
 
@@ -1302,9 +1312,13 @@ function buildGuruPage() {
   </table></div>`;
 }
 
+let _siswFilterKls = 0;
 function buildSiswaPage() {
-  const filterKls = $('f-siswa-kls')?+$('f-siswa-kls').value:0;
-  let rows = filterKls?DB.siswa.filter(s=>s.kelasId===filterKls):DB.siswa;
+  // Use persisted filter value, or read from DOM if already rendered
+  const domEl = $('f-siswa-kls');
+  if(domEl) _siswFilterKls = +domEl.value;
+  const filterKls = _siswFilterKls;
+  let rows = filterKls ? DB.siswa.filter(s=>+s.kelasId===filterKls) : DB.siswa;
   const tblRows = rows.map((r,i)=>`<tr>
     <td><code style="background:#f0f4f8;padding:2px 6px;border-radius:4px;font-size:12px">${r.nis}</code></td>
     <td><b>${r.nama}</b></td>
@@ -1312,7 +1326,7 @@ function buildSiswaPage() {
     <td>${tblAksi('siswa',r.id)}</td></tr>`).join('');
   return `
   <div class="filter-bar">
-    <select id="f-siswa-kls" onchange="goPage('siswa')">
+    <select id="f-siswa-kls" onchange="_siswFilterKls=+this.value;goPage('siswa')">
       <option value="">Semua Kelas</option>
       ${DB.kelas.map(k=>`<option value="${k.id}"${filterKls===k.id?' selected':''}>${k.nama}</option>`).join('')}
     </select>
@@ -1361,10 +1375,11 @@ function getGuruPage(id) {
   if(id==='lap-remedial') return buildLapRemedialPage();
   if(id==='cetak') return buildCetakPage();
   if(id==='porto') return buildPortoPage();
+  if(id==='cetak-rekap') return buildCetakRekapPage();
+  if(id==='cetak-porto') return buildCetakPortoPage();
   if(id==='log') return buildLogPage();
   if(id==='peringkat') return buildPeringkatPage();
   if(id==='pengumuman') return buildPengumumanPage();
-  if(id==='bank-soal') return buildBankSoalPage();
   return '<div class="card">Halaman tidak ditemukan</div>';
 }
 
@@ -1388,12 +1403,12 @@ function buildGuruDash() {
   <div class="stats-grid">
     <div class="stat-card" style="background:linear-gradient(135deg,#CC2222,#991111)"><div class="stat-ico">👧</div><div><div class="stat-val">${siswaCount}</div><div class="stat-lbl">Siswa</div></div></div>
     <div class="stat-card" style="background:linear-gradient(135deg,#16a34a,#15803d)"><div class="stat-ico">📖</div><div><div class="stat-val">${myMp.length}</div><div class="stat-lbl">Mapel Diajar</div></div></div>
-    <div class="stat-card" style="background:linear-gradient(135deg,#7c3aed,#6d28d9)"><div class="stat-ico">📝</div><div><div class="stat-val">${DB.bankSoal.filter(s=>s.guruId===STATE.activeGuruId).length}</div><div class="stat-lbl">Bank Soal</div></div></div>
+    <div class="stat-card" style="background:linear-gradient(135deg,#7c3aed,#6d28d9)"><div class="stat-ico">📝</div><div><div class="stat-val">${nilaiCount}</div><div class="stat-lbl">Total Nilai</div></div></div>
   </div>
   <div class="card">
     <div class="card-title">⚡ Aksi Cepat</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px">
-      ${[['✏️','Input Nilai','input-nilai','var(--blue)'],['🌿','Input Kokurikuler','input-koku','#16a34a'],['📋','Daftar Nilai','daftar-nilai','#7c3aed'],['🏆','Peringkat','peringkat','var(--yellow)'],['📄','Cetak Laporan','cetak','#0891b2'],['📝','Bank Soal','bank-soal','#cc2222']].map(([ico,lbl,pg,color])=>`
+      ${[['✏️','Input Nilai','input-nilai','var(--blue)'],['🌿','Input Kokurikuler','input-koku','#16a34a'],['📋','Daftar Nilai','daftar-nilai','#7c3aed'],['🏆','Peringkat','peringkat','var(--yellow)'],['📄','Cetak Rekap','cetak-rekap','#0891b2'],['📰','Cetak Porto','cetak-porto','#cc2222']].map(([ico,lbl,pg,color])=>`
         <button onclick="goPage('${pg}')" style="background:${color}18;border:2px solid ${color}40;border-radius:12px;padding:12px 8px;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;font-weight:700;color:${color==='var(--yellow)'?'#b45309':color};transition:all .2s;cursor:pointer" onmouseover="this.style.background='${color}30'" onmouseout="this.style.background='${color}18'">
           <span style="font-size:22px">${ico}</span>${lbl}
         </button>`).join('')}
@@ -1491,20 +1506,206 @@ function buildKokuDataPage(){
   const g=DB.guru.find(x=>x.id===STATE.activeGuruId)||{};
   const myKls=getGuruKelasIds(g);
   const filterKls=$('f-kk-kls')?+$('f-kk-kls').value:0;
-  let rows=DB.koku.filter(k=>myKls.includes(k.kelasId));
-  if(filterKls)rows=rows.filter(r=>r.kelasId===filterKls);
-  const tblRows=rows.map((r,i)=>`<tr><td>${gKelas(r.kelasId).nama||'—'}</td><td>${r.tema||'—'}</td><td>${r.judul||'—'}</td><td style="font-size:11px">${r.elemen||'—'}</td><td style="font-size:11px">${r.subElemen||'—'}</td><td>${tblAksi('koku',r.id)}</td></tr>`).join('');
+
+  // Group DB.koku entries by projek (tema+judul per kelas)
+  // Each projek = {kelasId, tema, judul, elemen:[], subElemen:[]}
+  // We store projek-level in DB.kokuProjek (new array) and elemen rows still in DB.koku
+  // For backward compat: DB.koku entries that have tema+judul belong to a projek
+  let proyeks=DB.kokuProjek||(DB.kokuProjek=[]);
+  if(filterKls) proyeks=proyeks.filter(p=>p.kelasId===filterKls);
+  else proyeks=proyeks.filter(p=>myKls.includes(p.kelasId));
+
+  const cards=proyeks.map((proj,i)=>{
+    const klsNama=gKelas(proj.kelasId).nama||'—';
+    const elems=(proj.elemenList||[]);
+    const elemBadges=elems.map(e=>`<div style="background:#f0f4ff;border:1.5px solid #c7d9f8;border-radius:7px;padding:5px 9px;margin:3px 0">
+      <div style="font-size:11px;font-weight:700;color:var(--blue)">${e.elemen}</div>
+      <div style="font-size:10px;color:var(--gray);margin-top:2px">${(e.subElemenList||[]).join(' • ')}</div>
+    </div>`).join('');
+    return`<div class="card" style="border:2px solid #c7d9f8;margin-bottom:12px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <div style="flex:1">
+          <div style="display:flex;gap:7px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+            <span class="badge bg-blue" style="font-size:11px">${klsNama}</span>
+            <span style="font-size:12px;color:var(--gray)">Tema: <b>${proj.tema||'—'}</b></span>
+          </div>
+          <div style="font-size:15px;font-weight:800;color:var(--dark);margin-bottom:8px">📁 ${proj.judul||'—'}</div>
+          <div style="font-size:11px;font-weight:700;color:var(--gray);margin-bottom:4px;text-transform:uppercase">Elemen & Sub Elemen:</div>
+          ${elemBadges||'<div style="color:#94a3b8;font-size:12px">Belum ada elemen</div>'}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0">
+          <button class="btn btn-yellow btn-sm" onclick="editKokuProjek(${proj.id})">✏️ Edit</button>
+          <button class="btn btn-red btn-sm" onclick="hapusKokuProjek(${proj.id})">🗑 Hapus</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
   return `
-  <div class="filter-bar"><select id="f-kk-kls" onchange="goPage('koku-data')"><option value="">Semua Kelas</option>${DB.kelas.filter(k=>myKls.includes(k.id)).map(k=>`<option value="${k.id}"${filterKls===k.id?' selected':''}>${k.nama}</option>`).join('')}</select></div>
+  <div class="filter-bar"><select id="f-kk-kls" onchange="goPage('koku-data')"><option value="">Semua Kelas</option>${DB.kelas.filter(k=>myKls.includes(k.id)).map(k=>`<option value="${k.id}"${filterKls===k.id?' selected':''}>${k.nama}</option>`).join('')}</select>
+  <span style="font-size:12px;color:var(--gray)">${proyeks.length} projek</span></div>
   <div class="toolbar">
-    <button class="btn btn-primary" onclick="openKokuMo()">＋ Tambah</button>
-    <button class="btn btn-green" onclick="openMoImport('koku')">⬆ Import</button>
-    <button class="btn btn-gray" onclick="exportCSV('koku')">⬇ Export</button>
+    <button class="btn btn-primary" onclick="bukaFormKokuProjek(null)">＋ Tambah Projek</button>
   </div>
-  <div class="tbl-wrap"><table id="tbl-koku">
-    <thead><tr><th>Kelas</th><th>Tema</th><th>Judul Kegiatan</th><th>Elemen</th><th>Sub Elemen</th><th>Aksi</th></tr></thead>
-    <tbody>${tblRows||'<tr><td colspan="6" class="tbl-empty">Belum ada data kokurikuler</td></tr>'}</tbody>
-  </table></div>`;
+  <div id="koku-projek-form-wrap"></div>
+  ${cards||'<div class="card" style="text-align:center;color:var(--gray);padding:36px"><div style="font-size:34px;margin-bottom:10px">🌱</div><div>Belum ada projek kokurikuler. Klik Tambah Projek untuk memulai.</div></div>'}`;
+}
+
+function bukaFormKokuProjek(projId){
+  const proj=projId?DB.kokuProjek.find(p=>p.id===projId):null;
+  const g=DB.guru.find(x=>x.id===STATE.activeGuruId)||{};
+  const myKls=getGuruKelasIds(g);
+  const klsOpts=DB.kelas.filter(k=>myKls.includes(k.id)).map(k=>`<option value="${k.id}"${proj&&proj.kelasId===k.id?' selected':''}>${k.nama}</option>`).join('');
+  const elems=proj?JSON.parse(JSON.stringify(proj.elemenList||[])):[{elemen:'',subElemenList:['']}];
+  const elemsJson=JSON.stringify(elems).replace(/"/g,'&quot;');
+  const wrap=$('koku-projek-form-wrap');if(!wrap)return;
+  wrap.innerHTML=`<div class="card" style="border:2px solid var(--blue);background:#f0f7ff" id="koku-pj-form">
+    <div class="card-title">${projId?'✏️ Edit Projek':'➕ Tambah Projek Kokurikuler'}</div>
+    <div class="grid2">
+      <div class="field"><label>Kelas</label><select id="pj-kls"><option value="">-- Pilih --</option>${klsOpts}</select></div>
+      <div class="field"><label>Tema Projek</label><input type="text" id="pj-tema" value="${proj?.tema||''}" placeholder="Contoh: Suara Demokrasi"></div>
+    </div>
+    <div class="field"><label>Judul Projek</label><input type="text" id="pj-judul" value="${proj?.judul||''}" placeholder="Contoh: Pemilihan Ketua Kelas"></div>
+    <div style="font-size:11px;font-weight:800;color:var(--blue);text-transform:uppercase;margin-bottom:8px;margin-top:4px">Elemen & Sub Elemen <span style="font-weight:400;text-transform:none;color:var(--gray)">(boleh lebih dari satu elemen, sub-elemen tidak boleh sama)</span></div>
+    <div id="pj-elems-wrap"></div>
+    <button class="btn btn-info btn-sm" onclick="pjTambahElem()" style="margin-bottom:12px">＋ Tambah Elemen</button>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="simpanKokuProjek(${projId||0})">💾 Simpan Projek</button>
+      <button class="btn btn-gray" onclick="document.getElementById('koku-pj-form').remove()">Batal</button>
+    </div>
+  </div>`;
+  _pjElems=JSON.parse(JSON.stringify(elems));
+  _pjElemIdx=0;
+  $('pj-elems-wrap').innerHTML='';
+  _pjElems.forEach((_,i)=>pjRenderElem(i));
+}
+let _pjElems=[],_pjElemIdx=0;
+function pjTambahElem(){
+  _pjElems.push({elemen:'',subElemenList:['']});
+  pjRenderElem(_pjElems.length-1);
+}
+function pjRenderElem(i){
+  const e=_pjElems[i];
+  const wrap=$('pj-elems-wrap');if(!wrap)return;
+  const div=document.createElement('div');
+  div.id='pj-elem-row-'+i;
+  div.style.cssText='background:#fff;border:1.5px solid #dde8ff;border-radius:10px;padding:12px;margin-bottom:8px';
+  const eO=KOKU_ELEMS.map(el=>`<option value="${el}"${el===e.elemen?' selected':''}>${el}</option>`).join('');
+  const subRows=(e.subElemenList||['']).map((sub,si)=>{
+    const subO=(KOKU_DATA[e.elemen]||[]).map(s=>`<option value="${s}"${s===sub?' selected':''}>${s}</option>`).join('');
+    return`<div id="pj-sub-row-${i}-${si}" style="display:flex;gap:6px;align-items:center;margin-bottom:5px">
+      <select id="pj-sub-${i}-${si}" onchange="pjSubChg(${i},${si})" style="flex:1;border:1.5px solid var(--border);border-radius:8px;padding:6px 8px;font-size:12px;font-family:var(--font);outline:none">
+        <option value="">-- Pilih Sub Elemen --</option>${subO}
+      </select>
+      ${si>0?`<button onclick="pjHapusSub(${i},${si})" style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:7px;cursor:pointer;color:var(--red);font-size:13px;padding:4px 8px">✕</button>`:''}
+    </div>`;
+  }).join('');
+  div.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+    <div style="font-size:11px;font-weight:800;color:var(--blue)">Elemen ${i+1}</div>
+    ${i>0?`<button onclick="pjHapusElem(${i})" style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:7px;cursor:pointer;color:var(--red);font-size:12px;padding:3px 8px">Hapus Elemen</button>`:''}
+  </div>
+  <div class="field" style="margin-bottom:8px"><label>Elemen</label>
+    <select id="pj-elem-${i}" onchange="pjElemChg(${i})" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:13px;font-family:var(--font);outline:none">
+      <option value="">-- Pilih Elemen --</option>${eO}
+    </select>
+  </div>
+  <div style="font-size:11px;font-weight:700;color:var(--gray);margin-bottom:6px">Sub Elemen:</div>
+  <div id="pj-subs-${i}">${subRows}</div>
+  <button onclick="pjTambahSub(${i})" class="btn btn-info btn-sm" style="margin-top:4px">＋ Sub Elemen</button>`;
+  wrap.appendChild(div);
+}
+function pjElemChg(i){
+  const val=document.getElementById('pj-elem-'+i)?.value||'';
+  _pjElems[i].elemen=val;
+  _pjElems[i].subElemenList=[''];
+  // Re-render just the sub rows
+  const subsWrap=document.getElementById('pj-subs-'+i);if(!subsWrap)return;
+  const subO=(KOKU_DATA[val]||[]).map(s=>`<option value="${s}">${s}</option>`).join('');
+  subsWrap.innerHTML=`<div id="pj-sub-row-${i}-0" style="display:flex;gap:6px;align-items:center;margin-bottom:5px">
+    <select id="pj-sub-${i}-0" onchange="pjSubChg(${i},0)" style="flex:1;border:1.5px solid var(--border);border-radius:8px;padding:6px 8px;font-size:12px;font-family:var(--font);outline:none">
+      <option value="">-- Pilih Sub Elemen --</option>${subO}
+    </select>
+  </div>`;
+}
+function pjSubChg(i,si){
+  const val=document.getElementById('pj-sub-'+i+'-'+si)?.value||'';
+  if(!_pjElems[i])return;
+  if(!_pjElems[i].subElemenList)_pjElems[i].subElemenList=[];
+  _pjElems[i].subElemenList[si]=val;
+}
+function pjTambahSub(i){
+  if(!_pjElems[i])return;
+  const elem=_pjElems[i].elemen;
+  const existing=_pjElems[i].subElemenList||[];
+  const available=(KOKU_DATA[elem]||[]).filter(s=>!existing.includes(s));
+  if(!available.length){toast('Semua sub elemen sudah dipilih!','inf');return;}
+  _pjElems[i].subElemenList=[...(existing),''];
+  const si=_pjElems[i].subElemenList.length-1;
+  const wrap=document.getElementById('pj-subs-'+i);if(!wrap)return;
+  const subO=(KOKU_DATA[elem]||[]).map(s=>`<option value="${s}">${s}</option>`).join('');
+  const div=document.createElement('div');
+  div.id='pj-sub-row-'+i+'-'+si;div.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:5px';
+  div.innerHTML=`<select id="pj-sub-${i}-${si}" onchange="pjSubChg(${i},${si})" style="flex:1;border:1.5px solid var(--border);border-radius:8px;padding:6px 8px;font-size:12px;font-family:var(--font);outline:none"><option value="">-- Pilih Sub Elemen --</option>${subO}</select>
+  <button onclick="pjHapusSub(${i},${si})" style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:7px;cursor:pointer;color:var(--red);font-size:13px;padding:4px 8px">✕</button>`;
+  wrap.appendChild(div);
+}
+function pjHapusSub(i,si){
+  if(!_pjElems[i])return;
+  _pjElems[i].subElemenList.splice(si,1);
+  document.getElementById('pj-sub-row-'+i+'-'+si)?.remove();
+}
+function pjHapusElem(i){
+  _pjElems.splice(i,1);
+  document.getElementById('pj-elem-row-'+i)?.remove();
+}
+async function simpanKokuProjek(projId){
+  const kid=+$('pj-kls')?.value,tema=$('pj-tema')?.value.trim(),judul=$('pj-judul')?.value.trim();
+  if(!kid){toast('Pilih kelas!','err');return;}
+  if(!judul){toast('Isi judul projek!','err');return;}
+  // Collect elems from DOM
+  const elemsWrap=$('pj-elems-wrap');
+  const collected=[];
+  if(elemsWrap){
+    _pjElems.forEach((e,i)=>{
+      const elemSel=document.getElementById('pj-elem-'+i);
+      const elemVal=elemSel?elemSel.value:e.elemen;
+      if(!elemVal)return;
+      const subs=[];
+      (e.subElemenList||[]).forEach((_,si)=>{
+        const sv=document.getElementById('pj-sub-'+i+'-'+si)?.value;
+        if(sv&&!subs.includes(sv))subs.push(sv);
+      });
+      // Check dup sub elemen across all elems
+      collected.push({elemen:elemVal,subElemenList:subs});
+    });
+  }
+  // Validate: no duplicate sub-elemen across whole projek
+  const allSubs=[];let dupFound=false;
+  collected.forEach(e=>e.subElemenList.forEach(s=>{if(allSubs.includes(s)){dupFound=true;}else allSubs.push(s);}));
+  if(dupFound){toast('Sub Elemen tidak boleh sama dalam satu projek!','err');return;}
+  if(!DB.kokuProjek)DB.kokuProjek=[];
+  if(projId){
+    const idx=DB.kokuProjek.findIndex(p=>p.id===+projId);
+    if(idx>=0)DB.kokuProjek[idx]={...DB.kokuProjek[idx],kelasId:kid,tema,judul,elemenList:collected};
+  }else{
+    DB.kokuProjek.push({id:gId(DB.kokuProjek),kelasId:kid,tema,judul,elemenList:collected});
+  }
+  // Also sync old DB.koku for backwards compat
+  DB.koku=DB.koku.filter(k=>k.kelasId!==kid||!(k.judul===judul&&k.tema===tema));
+  collected.forEach(e=>e.subElemenList.forEach(sub=>{
+    DB.koku.push({id:gId(DB.koku),kelasId:kid,tema,judul,elemen:e.elemen,subElemen:sub});
+  }));
+  toast('✅ Projek disimpan!','ok');
+  if(STATE.gsOk)await syncToGS();
+  goPage('koku-data');
+}
+function editKokuProjek(id){bukaFormKokuProjek(id);}
+async function hapusKokuProjek(id){
+  if(!confirm('Hapus projek ini beserta semua elemennya?'))return;
+  DB.kokuProjek=(DB.kokuProjek||[]).filter(p=>p.id!==+id);
+  toast('Projek dihapus','ok');
+  if(STATE.gsOk)await syncToGS();
+  goPage('koku-data');
 }
 
 // ===================== INPUT NILAI MAPEL =====================
@@ -1642,11 +1843,12 @@ function buildInputKokuPage(){
     <div class="grid2">
       <div class="field"><label>Tanggal</label><input type="date" id="nk-tgl" value="${todayStr()}"></div>
       <div class="field"><label>Kelas</label><select id="nk-kls" onchange="nkUpdKelas()"><option value="">-- Pilih --</option>${klsOpts}</select></div>
+      <div class="field" id="nk-projek-field" style="display:none"><label>Nama Projek</label><select id="nk-projek" onchange="nkUpdProjek()"><option value="">-- Pilih Projek --</option></select></div>
     </div>
-    <div style="background:#f0f6ff;border:1.5px solid #c7d9f8;border-radius:11px;padding:13px;margin-bottom:13px">
-      <div style="font-size:11px;font-weight:800;color:var(--blue);text-transform:uppercase;margin-bottom:10px">Elemen & Sub Elemen</div>
-      <div id="nk-rows-wrap"><div style="color:#94a3b8;font-size:12px;font-style:italic">Pilih kelas terlebih dahulu</div></div>
-      <button class="btn btn-info btn-sm" style="margin-top:10px" id="nk-add-btn" onclick="nkTambahRow()" disabled>＋ Tambah Elemen</button>
+    <div style="background:#f0f6ff;border:1.5px solid #c7d9f8;border-radius:11px;padding:13px;margin-bottom:13px;display:none" id="nk-elemen-card">
+      <div style="font-size:11px;font-weight:800;color:var(--blue);text-transform:uppercase;margin-bottom:10px">Elemen & Sub Elemen <span style="font-weight:400;text-transform:none;color:var(--gray)">(dari projek, boleh pilih lebih dari satu)</span></div>
+      <div id="nk-rows-wrap"></div>
+      <button class="btn btn-info btn-sm" style="margin-top:10px" id="nk-add-btn" onclick="nkTambahRow()">＋ Tambah Baris</button>
     </div>
     <button class="btn btn-primary" onclick="nkLoad()">▶ Tampilkan Siswa</button>
   </div>
@@ -1660,18 +1862,42 @@ function buildInputKokuPage(){
 function nkUpdKelas(){
   const kid=+$('nk-kls')?.value;
   _nkRowIdx=0;
-  const wrap=$('nk-rows-wrap');if(!wrap)return;
-  const btn=$('nk-add-btn');
   $('nk-tbl-wrap').style.display='none';
-  if(!kid){wrap.innerHTML='<div style="color:#94a3b8;font-size:12px;font-style:italic">Pilih kelas terlebih dahulu</div>';if(btn)btn.disabled=true;return;}
-  const kokuKls=DB.koku.filter(k=>k.kelasId===kid);
-  if(!kokuKls.length){wrap.innerHTML='<div style="color:var(--red);font-size:12px">Belum ada data kokurikuler untuk kelas ini</div>';if(btn)btn.disabled=true;return;}
-  wrap.innerHTML='';if(btn)btn.disabled=false;nkTambahRow();
+  const pf=$('nk-projek-field'),ec=$('nk-elemen-card');
+  if(!kid){if(pf)pf.style.display='none';if(ec)ec.style.display='none';return;}
+  const proyeks=(DB.kokuProjek||[]).filter(p=>p.kelasId===kid);
+  const ps=$('nk-projek');
+  if(ps){ps.innerHTML='<option value="">-- Pilih Projek --</option>'+proyeks.map(p=>`<option value="${p.id}">${p.judul}</option>`).join('');}
+  if(pf)pf.style.display='block';
+  if(ec)ec.style.display='none';
+  $('nk-rows-wrap').innerHTML='';
 }
-function nkElemOpts(kid,sel=''){return[...new Set(DB.koku.filter(k=>k.kelasId===+kid&&k.elemen).map(k=>k.elemen))].map(e=>`<option value="${e}"${e===sel?' selected':''}>${e}</option>`).join('');}
-function nkSubOpts(kid,elem,sel=''){return[...new Set(DB.koku.filter(k=>k.kelasId===+kid&&k.elemen===elem&&k.subElemen).map(k=>k.subElemen))].map(s=>`<option value="${s}"${s===sel?' selected':''}>${s}</option>`).join('');}
+function nkUpdProjek(){
+  const kid=+$('nk-kls')?.value;
+  const projId=+$('nk-projek')?.value;
+  _nkRowIdx=0;
+  $('nk-tbl-wrap').style.display='none';
+  const ec=$('nk-elemen-card');
+  if(!projId){if(ec)ec.style.display='none';return;}
+  const proj=(DB.kokuProjek||[]).find(p=>p.id===projId);
+  if(!proj){if(ec)ec.style.display='none';return;}
+  if(ec)ec.style.display='block';
+  $('nk-rows-wrap').innerHTML='';
+  nkTambahRow();
+}
+function nkElemOpts(kid,projId,sel=''){
+  const proj=(DB.kokuProjek||[]).find(p=>p.id===+projId&&p.kelasId===+kid);
+  if(!proj)return[...new Set(DB.koku.filter(k=>k.kelasId===+kid&&k.elemen).map(k=>k.elemen))].map(e=>`<option value="${e}"${e===sel?' selected':''}>${e}</option>`).join('');
+  return(proj.elemenList||[]).map(e=>`<option value="${e.elemen}"${e.elemen===sel?' selected':''}>${e.elemen}</option>`).join('');
+}
+function nkSubOpts(kid,projId,elem,sel=''){
+  const proj=(DB.kokuProjek||[]).find(p=>p.id===+projId&&p.kelasId===+kid);
+  if(!proj)return[...new Set(DB.koku.filter(k=>k.kelasId===+kid&&k.elemen===elem&&k.subElemen).map(k=>k.subElemen))].map(s=>`<option value="${s}"${s===sel?' selected':''}>${s}</option>`).join('');
+  const e=(proj.elemenList||[]).find(x=>x.elemen===elem);
+  return(e?e.subElemenList||[]:DB.koku.filter(k=>k.kelasId===+kid&&k.elemen===elem).map(k=>k.subElemen)).map(s=>`<option value="${s}"${s===sel?' selected':''}>${s}</option>`).join('');
+}
 function nkTambahRow(){
-  const kid=+$('nk-kls')?.value;if(!kid)return;
+  const kid=+$('nk-kls')?.value;const projId=+$('nk-projek')?.value;if(!kid)return;
   _nkRowIdx++;const rid=_nkRowIdx;
   const wrap=$('nk-rows-wrap');if(!wrap)return;
   const ph=document.getElementById('nk-rows-ph');if(ph)ph.remove();
@@ -1680,13 +1906,18 @@ function nkTambahRow(){
   div.style.cssText='display:grid;grid-template-columns:1fr 1fr 36px;gap:8px;align-items:end;background:#fff;border:1.5px solid #dde8ff;border-radius:9px;padding:9px 10px;margin-bottom:7px';
   div.innerHTML=`<div><div style="font-size:10px;font-weight:700;color:var(--gray);margin-bottom:3px;text-transform:uppercase">Elemen</div>
     <select id="nkel-${rid}" onchange="nkChgElem(${rid})" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;font-family:var(--font);outline:none">
-      <option value="">-- Pilih --</option>${nkElemOpts(kid)}</select></div>
+      <option value="">-- Pilih --</option>${nkElemOpts(kid,projId)}</select></div>
     <div><div style="font-size:10px;font-weight:700;color:var(--gray);margin-bottom:3px;text-transform:uppercase">Sub Elemen</div>
     <select id="nksub-${rid}" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;font-family:var(--font);outline:none"><option value="">-- Pilih --</option></select></div>
     <button onclick="document.getElementById('nk-row-${rid}').remove()" style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:8px;cursor:pointer;font-size:14px;color:var(--red);height:34px;width:36px">✕</button>`;
   wrap.appendChild(div);
 }
-function nkChgElem(rid){const kid=+$('nk-kls')?.value;const elem=document.getElementById('nkel-'+rid)?.value||'';const sub=document.getElementById('nksub-'+rid);if(sub)sub.innerHTML='<option value="">-- Pilih --</option>'+nkSubOpts(kid,elem);}
+function nkChgElem(rid){
+  const kid=+$('nk-kls')?.value;const projId=+$('nk-projek')?.value;
+  const elem=document.getElementById('nkel-'+rid)?.value||'';
+  const sub=document.getElementById('nksub-'+rid);
+  if(sub)sub.innerHTML='<option value="">-- Pilih --</option>'+nkSubOpts(kid,projId,elem);
+}
 function nkGetRows(){
   const result=[];
   for(let i=1;i<=_nkRowIdx;i++){const el=document.getElementById('nkel-'+i),sub=document.getElementById('nksub-'+i);if(el&&sub&&el.value&&sub.value)result.push({idx:i,elemen:el.value,subElemen:sub.value});}
@@ -1697,6 +1928,9 @@ function nkLoad(){
   if(!kid){toast('Pilih kelas!','err');return;}
   const rows=nkGetRows();
   if(!rows.length){toast('Pilih minimal 1 Elemen & Sub Elemen!','err');return;}
+  // Validate no duplicate sub-elemen
+  const subSet=new Set(rows.map(r=>r.subElemen));
+  if(subSet.size!==rows.length){toast('Sub Elemen tidak boleh sama!','err');return;}
   const sw=DB.siswa.filter(s=>s.kelasId===kid);
   if(!sw.length){toast('Tidak ada siswa di kelas ini!','err');return;}
   const colHdr=rows.map(r=>`<th style="text-align:center;min-width:130px;font-size:11px;line-height:1.4">${r.subElemen}<br><small style="font-weight:400;opacity:.7;font-size:9px">${r.elemen}</small></th>`).join('');
@@ -1733,10 +1967,10 @@ async function nkSimpan(){
 function buildDaftarNilaiPage(){
   const g=DB.guru.find(x=>x.id===STATE.activeGuruId)||{};
   const myKls=getGuruKelasIds(g);
-  const dnKls=$('dn-kls')?+$('dn-kls').value:0;
+  const logHtml=_buildDNLog(myKls);
   return `
   <div class="card">
-    <div class="card-title">📋 Filter Daftar Nilai</div>
+    <div class="card-title">✏️ Edit Nilai — Filter</div>
     <div class="grid2">
       <div class="field"><label>Kelas</label><select id="dn-kls" onchange="dnUpdMapel()"><option value="">-- Pilih --</option>${DB.kelas.filter(k=>myKls.includes(k.id)).map(k=>`<option value="${k.id}">${k.nama}</option>`).join('')}</select></div>
       <div class="field"><label>Mata Pelajaran</label><select id="dn-mp" onchange="dnLoad()"><option value="">-- Pilih --</option></select></div>
@@ -1749,10 +1983,97 @@ function buildDaftarNilaiPage(){
       <button class="btn btn-green" onclick="dnSimpan()">💾 Simpan Perubahan</button>
     </div>
   </div>
-  <div id="dn-empty" class="card" style="text-align:center;color:var(--gray);padding:36px">
-    <div style="font-size:34px;margin-bottom:9px">📋</div><div>Pilih Kelas dan Mata Pelajaran</div>
+  <div id="dn-empty" class="card" style="text-align:center;color:var(--gray);padding:28px">
+    <div style="font-size:30px;margin-bottom:8px">✏️</div><div>Pilih Kelas dan Mata Pelajaran untuk mengedit nilai</div>
+  </div>
+
+  <div class="card" style="margin-top:8px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+      <div class="card-title" style="margin-bottom:0">📜 Log Hasil Asesmen Semua Mata Pelajaran</div>
+      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+        <select id="dn-log-kls" onchange="dnRefreshLog()" style="border:2px solid var(--border);border-radius:9px;padding:6px 10px;font-size:12px;font-family:var(--font);outline:none">
+          <option value="">Semua Kelas</option>
+          ${DB.kelas.filter(k=>myKls.includes(k.id)).map(k=>`<option value="${k.id}">${k.nama}</option>`).join('')}
+        </select>
+        <select id="dn-log-mp" onchange="dnRefreshLog()" style="border:2px solid var(--border);border-radius:9px;padding:6px 10px;font-size:12px;font-family:var(--font);outline:none">
+          <option value="">Semua Mapel</option>
+          ${DB.mapel.filter(m=>myKls.includes(m.kelasId)).map(m=>`<option value="${m.id}">${m.nama}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div id="dn-log-wrap">${logHtml}</div>
   </div>`;
 }
+
+function dnRefreshLog(){
+  const g=DB.guru.find(x=>x.id===STATE.activeGuruId)||{};
+  const myKls=getGuruKelasIds(g);
+  const el=$('dn-log-wrap');if(el)el.innerHTML=_buildDNLog(myKls);
+}
+
+function _buildDNLog(myKls){
+  const filterMp=$('dn-log-mp')?+$('dn-log-mp').value:0;
+  const filterKls=$('dn-log-kls')?+$('dn-log-kls').value:0;
+  const map={};
+  DB.nilaiMapel.forEach(n=>{
+    const s=DB.siswa.find(x=>x.id===n.siswaId);
+    const kid=s?s.kelasId:0;
+    if(!myKls.includes(kid))return;
+    if(filterKls&&kid!==filterKls)return;
+    if(filterMp&&n.mapelId!==filterMp)return;
+    const tids=Array.isArray(n.tujuanIds)?n.tujuanIds:(n.tujuanId?[n.tujuanId]:[]);
+    const key=[n.tgl,kid,n.mapelId,tids.join(','),n.waktu||'',n.jenis||''].join('|');
+    if(!map[key])map[key]={tgl:n.tgl,kelasId:kid,mapelId:n.mapelId,tujuanIds:tids,waktu:n.waktu||'—',jenis:n.jenis||'—',count:0,key};
+    map[key].count++;
+  });
+  const sesi=Object.values(map).sort((a,b)=>(b.tgl||'').localeCompare(a.tgl||''));
+  if(!sesi.length)return'<div style="text-align:center;color:var(--gray);padding:20px">Belum ada data asesmen</div>';
+  const rows=sesi.map((s,i)=>`<tr style="${i%2?'background:#f8faff':''}">
+    <td style="white-space:nowrap;font-size:11px;color:var(--blue)">${fmtD(s.tgl)}</td>
+    <td style="font-weight:600">${gKelas(s.kelasId).nama||'—'}</td>
+    <td>${gMapel(s.mapelId).nama||'—'}</td>
+    <td><span class="badge bg-blue" style="font-size:10px">${s.waktu}</span></td>
+    <td><span class="badge bg-green" style="font-size:10px">${s.jenis}</span></td>
+    <td style="text-align:center;font-weight:700;color:var(--blue)">${s.count}</td>
+    <td><button class="btn btn-info btn-sm" onclick="dnLihatNilai('${s.key.replace(/\|/g,'__PIPE__').replace(/'/g,"\\'")}')">👁 Lihat Nilai</button></td>
+  </tr>`).join('');
+  return`<div class="tbl-wrap"><table>
+    <thead><tr><th>Tanggal</th><th>Kelas</th><th>Mapel</th><th>Waktu</th><th>Jenis</th><th style="text-align:center">Siswa</th><th>Aksi</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+function dnLihatNilai(rawKey){
+  const key=rawKey.replace(/__PIPE__/g,'|');
+  const parts=key.split('|');
+  const tgl=parts[0],kid=+parts[1],mid=+parts[2];
+  const tids=parts[3]?parts[3].split(',').filter(Boolean).map(Number):[];
+  const waktu=parts[4],jenis=parts[5];
+  const kls=gKelas(kid),mp=gMapel(mid);
+  const sw=DB.siswa.filter(s=>s.kelasId===kid);
+  const tpList=tids.length?tids.map(tid=>gTujuan(tid)):DB.tujuan.filter(t=>t.kelasId===kid&&t.mapelId===mid);
+  const colHdr=tpList.map((t,i)=>`<th style="text-align:center;font-size:11px">TP${i+1}<br><small style="opacity:.8">KKTP:${t.kktp||75}</small></th>`).join('');
+  const rows=sw.map((s,i)=>{
+    const cells=tpList.map(t=>{
+      const n=DB.nilaiMapel.find(x=>x.siswaId===s.id&&x.mapelId===mid&&x.tgl===tgl&&(x.tujuanId===t.id||(Array.isArray(x.tujuanIds)&&x.tujuanIds.includes(t.id))));
+      if(!n)return'<td style="text-align:center;color:#ccc">—</td>';
+      const nc=+n.nilai>=(t.kktp||75)?'#16a34a':'var(--red)';
+      return`<td style="text-align:center;font-weight:700;color:${nc}">${n.nilai}</td>`;
+    }).join('');
+    return`<tr style="${i%2?'background:#f8faff':''}"><td>${i+1}</td><td style="font-size:11px;color:var(--gray)">${s.nis}</td><td style="font-weight:600">${s.nama}</td>${cells}</tr>`;
+  }).join('');
+  openMoCrud('view-nilai',null,`
+    <div style="background:linear-gradient(135deg,#1565C0,#0D47A1);border-radius:12px;padding:14px 18px;margin-bottom:14px">
+      <div style="color:#fff;font-weight:800;font-size:15px">${mp.nama||'—'} — ${kls.nama||'—'}</div>
+      <div style="color:rgba(255,255,255,.7);font-size:12px;margin-top:4px">${fmtD(tgl)} • ${waktu} • ${jenis}</div>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>No</th><th>NIS</th><th>Nama Siswa</th>${colHdr||'<th style="text-align:center">Nilai</th>'}</tr></thead>
+      <tbody>${rows||'<tr><td colspan="'+(3+Math.max(tpList.length,1))+'" class="tbl-empty">Belum ada data</td></tr>'}</tbody>
+    </table></div>
+  `);
+}
+
 function dnUpdMapel(){
   const kid=$('dn-kls')?.value;
   const sel=$('dn-mp');if(!sel)return;
@@ -1794,6 +2115,8 @@ async function dnSimpan(){
   inps.forEach(inp=>{const{siswa,tujuan,tgl,mid}=inp.dataset;const sid=+siswa,tid=tujuan?+tujuan:null,v=+inp.value;const idx=DB.nilaiMapel.findIndex(x=>x.siswaId===sid&&x.tgl===tgl&&(tid?(x.tujuanId===tid||(Array.isArray(x.tujuanIds)&&x.tujuanIds.includes(tid))):x.mapelId===+mid));if(idx>=0){if(v)DB.nilaiMapel[idx].nilai=v;else DB.nilaiMapel.splice(idx,1);}else if(v){DB.nilaiMapel.push({id:gId(DB.nilaiMapel),tgl,siswaId:sid,mapelId:+mid,tujuanId:tid,tujuanIds:tid?[tid]:[],nilai:v});}n++;});
   toast(`✅ ${n} nilai disimpan!`,'ok');if(STATE.gsOk)await syncToGS();
 }
+
+
 
 // ===================== LAPORAN & CETAK =====================
 function buildLogPage(){
@@ -1907,6 +2230,8 @@ function pvRpt(n){const h=bRpt(n);if(h){const titles=['','Daftar Nilai Mapel','R
 function ctRpt(n){const h=bRpt(n);if(h)openPrint(h);}
 function bRpt(n){if(n===1)return bRpt1();if(n===2)return bRpt2();if(n===3)return bRpt3();if(n===4)return bRpt4();return null;}
 
+
+
 function bRpt1(){
   const kid=+$('r1-kls')?.value,mid=+$('r1-mp')?.value;
   if(!kid||!mid){toast('Pilih Kelas dan Mapel!','err');return null;}
@@ -1995,13 +2320,13 @@ function pvPorto(){const kid=+$('pf-kls')?.value,sid=+$('pf-sw')?.value;const t1
 function cetakPortoSiswa(){const kid=+$('pf-kls')?.value,sid=+$('pf-sw')?.value;const t1=$('pf-tgl1')?.value||'',t2=$('pf-tgl2')?.value||'';if(!kid||!sid){toast('Pilih kelas dan siswa!','err');return;}const s=DB.siswa.find(x=>x.id===sid);if(s)openPrint(bPF(s,t1,t2));}
 function cetakPortoKelas(){const kid=+$('pf-kls')?.value;const t1=$('pf-tgl1')?.value||'',t2=$('pf-tgl2')?.value||'';if(!kid){toast('Pilih kelas!','err');return;}const sw=DB.siswa.filter(s=>s.kelasId===kid);openPrint(sw.map((s,i)=>bPF(s,t1,t2)+(i<sw.length-1?'<div style="page-break-after:always"></div>':'')).join(''));}
 
-function bPF(s,periodeAwal,periodeAkhir){
+function bPF(s,periodeAwal,periodeAkhir,filterMapelId){
   const kls=gKelas(s.kelasId),w=gWali(s.kelasId);
   const d=new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
   const normTgl=t=>{if(!t)return '';if(/^\d{4}-\d{2}-\d{2}$/.test(t))return t;const d=new Date(t);return isNaN(d)?t:d.toISOString().slice(0,10);};
   const pA=normTgl(periodeAwal),pZ=normTgl(periodeAkhir);
   const nilaiFilter=n=>{if(n.siswaId!==s.id)return false;const nt=normTgl(n.tgl);if(pA&&nt&&nt<pA)return false;if(pZ&&nt&&nt>pZ)return false;return true;};
-  const ml=DB.mapel.filter(m=>m.kelasId===s.kelasId);
+  const ml=DB.mapel.filter(m=>m.kelasId===s.kelasId&&(!filterMapelId||m.id===+filterMapelId));
   const mapelSections=ml.map(m=>{
     const tpList=DB.tujuan.filter(t=>t.kelasId===s.kelasId&&t.mapelId===m.id);
     const allNilai=DB.nilaiMapel.filter(n=>nilaiFilter(n)&&n.mapelId===m.id);
@@ -2217,12 +2542,7 @@ function openGenModal(){
 }
 
 // ===================== MURID PAGES =====================
-function getMuridPage(id) {
-  if(id==='dashboard') return buildMuridDash();
-  if(id==='nilai-murid') return buildNilaiMurid();
-  if(id==='bank-soal-murid') return buildBankSoalMurid();
-  return '<div class="card">Halaman tidak ditemukan</div>';
-}
+// getMuridPage is defined later with remedial-murid support
 
 function buildMuridDash(){
   const s=DB.siswa.find(x=>x.id===STATE.activeSiswaId)||{};
@@ -2264,7 +2584,7 @@ function buildMuridDash(){
   <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
     <div class="stat-card" style="background:linear-gradient(135deg,#CC2222,#991111)"><div class="stat-ico">📊</div><div><div class="stat-val">${allNilai.length}</div><div class="stat-lbl">Total Nilai</div></div></div>
     <div class="stat-card" style="background:linear-gradient(135deg,#16a34a,#15803d)"><div class="stat-ico">✅</div><div><div class="stat-val">${allNilai.filter(n=>{const tp=gTujuan(Array.isArray(n.tujuanIds)?n.tujuanIds[0]:n.tujuanId);return+n.nilai>=(tp.kktp||75);}).length}</div><div class="stat-lbl">Tuntas</div></div></div>
-    <div class="stat-card" style="background:linear-gradient(135deg,#1565C0,#0D47A1)"><div class="stat-ico">📚</div><div><div class="stat-val">${DB.bankSoal.filter(bs=>bs.kelasId===s.kelasId).length}</div><div class="stat-lbl">Bank Soal</div></div></div>
+    <div class="stat-card" style="background:linear-gradient(135deg,#7c3aed,#5b21b6)"><div class="stat-ico">📋</div><div><div class="stat-val">${DB.programRemedial.filter(p=>Array.isArray(p.siswaIds)&&p.siswaIds.includes(s.id)).length+DB.programPengayaan.filter(p=>Array.isArray(p.siswaIds)&&p.siswaIds.includes(s.id)).length}</div><div class="stat-lbl">Tindak Lanjut</div></div></div>
   </div>
 
   <div class="card">
@@ -2376,14 +2696,31 @@ function buildRemedialPage(){
   const progTbl=progRows.map((p,i)=>{
     const jBadge=p.jenis==='remedial'?'<span class="badge bg-red">Remedial</span>':'<span class="badge bg-green">Pengayaan</span>';
     const stColor=p.status==='selesai'?'#16a34a':p.status==='berlangsung'?'var(--yellow)':'var(--blue)';
-    return`<tr style="${i%2?'background:#f8faff':''}"><td>${jBadge}</td><td style="font-weight:700">${p.namaKelas||'—'}</td><td>${p.namaMapel||'—'}</td><td style="font-size:11px;white-space:nowrap">${fmtD(p.tglPelaksanaan)}</td><td style="text-align:center;font-weight:700;color:var(--blue)">${(p.siswaIds||[]).length}</td><td style="text-align:center"><span style="background:${stColor};color:#fff;padding:3px 9px;border-radius:5px;font-size:10px;font-weight:700">${p.status==='selesai'?'Selesai':p.status==='berlangsung'?'Berjalan':'Terjadwal'}</span></td><td><div style="display:flex;gap:4px"><button class="btn btn-yellow btn-sm" onclick="bukaInputNilaiRM('${p.jenis}',${p.id})">✏️ Nilai</button><button class="btn btn-red btn-sm" onclick="hapusProgram('${p.jenis}',${p.id})">🗑</button></div></td></tr>`;
+    return`<tr style="${i%2?'background:#f8faff':''}"><td>${jBadge}</td><td style="font-weight:700">${p.namaKelas||'—'}</td><td>${p.namaMapel||'—'}</td><td style="font-size:11px;white-space:nowrap">${fmtD(p.tglPelaksanaan)}</td><td style="text-align:center;font-weight:700;color:var(--blue)">${(p.siswaIds||[]).length}</td><td style="text-align:center"><span style="background:${stColor};color:#fff;padding:3px 9px;border-radius:5px;font-size:10px;font-weight:700">${p.status==='selesai'?'Selesai':p.status==='berlangsung'?'Berjalan':'Terjadwal'}</span></td><td><div style="display:flex;gap:4px;flex-wrap:wrap"><button class="btn btn-yellow btn-sm" onclick="bukaInputNilaiRM('${p.jenis}',${p.id})">✏️ Nilai</button><button class="btn btn-info btn-sm" onclick="lihatDaftarNilaiRM('${p.jenis}',${p.id})">📋 Daftar</button><button class="btn btn-red btn-sm" onclick="hapusProgram('${p.jenis}',${p.id})">🗑</button></div></td></tr>`;
   }).join('');
   return `
   <div class="hero-section" style="background:linear-gradient(135deg,var(--dark),#7c3aed)">
     <div class="hero-inner"><div class="hero-ico">📋</div><div class="hero-txt"><h2>Tindak Lanjut Asesmen</h2><p>Program Remedial & Pengayaan</p></div></div>
   </div>
+
+  <!-- LOG ASESMEN -->
   <div class="card">
-    <div class="card-title">🔍 Analisis Asesmen</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+      <div class="card-title" style="margin-bottom:0">📜 Log Hasil Asesmen — Pilih untuk Dianalisis</div>
+      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+        <select id="rm-log-kls" onchange="rmRefreshLog()" style="border:2px solid var(--border);border-radius:9px;padding:6px 10px;font-size:12px;font-family:var(--font);outline:none">
+          <option value="">Semua Kelas</option>${DB.kelas.filter(k=>myKls.includes(k.id)).map(k=>`<option value="${k.id}">${k.nama}</option>`).join('')}
+        </select>
+        <select id="rm-log-mp" onchange="rmRefreshLog()" style="border:2px solid var(--border);border-radius:9px;padding:6px 10px;font-size:12px;font-family:var(--font);outline:none">
+          <option value="">Semua Mapel</option>${DB.mapel.filter(m=>myKls.includes(m.kelasId)).map(m=>`<option value="${m.id}">${m.nama}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div id="rm-log-wrap">${_buildRMLog(myKls,0,0)}</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔍 Analisis Asesmen Manual</div>
     <div class="grid2">
       <div class="field"><label>Kelas</label><select id="rm-kls" onchange="rmUpdMapel()"><option value="">-- Pilih --</option>${klsOpts}</select></div>
       <div class="field"><label>Mata Pelajaran</label><select id="rm-mp" onchange="rmUpdTP()"><option value="">-- Pilih --</option></select></div>
@@ -2447,6 +2784,63 @@ function buildRemedialPage(){
     <div class="tbl-wrap"><table><thead><tr><th>Jenis</th><th>Kelas</th><th>Mapel</th><th>Tgl Pelaks.</th><th style="text-align:center">Siswa</th><th>Status</th><th>Aksi</th></tr></thead>
     <tbody>${progTbl||'<tr><td colspan="7" class="tbl-empty">Belum ada program</td></tr>'}</tbody></table></div>
   </div>`;
+}
+
+function _buildRMLog(myKls,filterKls,filterMp){
+  if(!filterKls)filterKls=$('rm-log-kls')?+$('rm-log-kls').value:0;
+  if(!filterMp)filterMp=$('rm-log-mp')?+$('rm-log-mp').value:0;
+  const map={};
+  DB.nilaiMapel.forEach(n=>{
+    const s=DB.siswa.find(x=>x.id===n.siswaId);
+    const kid=s?s.kelasId:0;
+    if(!myKls.includes(kid))return;
+    if(filterKls&&kid!==filterKls)return;
+    if(filterMp&&n.mapelId!==filterMp)return;
+    const tids=Array.isArray(n.tujuanIds)?n.tujuanIds:(n.tujuanId?[n.tujuanId]:[]);
+    const key=[n.tgl,kid,n.mapelId,tids.join(','),n.waktu||'',n.jenis||''].join('|');
+    if(!map[key])map[key]={tgl:n.tgl,kelasId:kid,mapelId:n.mapelId,tujuanIds:tids,waktu:n.waktu||'—',jenis:n.jenis||'—',count:0,key};
+    map[key].count++;
+  });
+  const sesi=Object.values(map).sort((a,b)=>(b.tgl||'').localeCompare(a.tgl||''));
+  if(!sesi.length)return'<div style="text-align:center;color:var(--gray);padding:20px">Belum ada data asesmen. Input nilai terlebih dahulu.</div>';
+  const rows=sesi.map((s,i)=>`<tr style="${i%2?'background:#f8faff':''}">
+    <td style="white-space:nowrap;font-size:11px;color:var(--blue)">${fmtD(s.tgl)}</td>
+    <td style="font-weight:600">${gKelas(s.kelasId).nama||'—'}</td>
+    <td>${gMapel(s.mapelId).nama||'—'}</td>
+    <td><span class="badge bg-blue" style="font-size:10px">${s.waktu}</span></td>
+    <td><span class="badge bg-green" style="font-size:10px">${s.jenis}</span></td>
+    <td style="text-align:center;font-weight:700;color:var(--blue)">${s.count}</td>
+    <td><button class="btn btn-primary btn-sm" onclick="rmLoadFromLog('${s.key.replace(/\|/g,'__P__').replace(/'/g,"\\'")}')">▶ Tampilkan Analisis</button></td>
+  </tr>`).join('');
+  return`<div class="tbl-wrap"><table>
+    <thead><tr><th>Tanggal</th><th>Kelas</th><th>Mapel</th><th>Waktu</th><th>Jenis</th><th style="text-align:center">Siswa</th><th>Aksi</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+function rmRefreshLog(){
+  const g=DB.guru.find(x=>x.id===STATE.activeGuruId)||{};
+  const myKls=getGuruKelasIds(g);
+  const el=$('rm-log-wrap');if(el)el.innerHTML=_buildRMLog(myKls,0,0);
+}
+
+function rmLoadFromLog(rawKey){
+  const key=rawKey.replace(/__P__/g,'|');
+  const parts=key.split('|');
+  const tgl=parts[0],kid=+parts[1],mid=+parts[2];
+  const waktu=parts[4];
+  // Set the filter dropdowns
+  const klsSel=$('rm-kls');if(klsSel){klsSel.value=kid;rmUpdMapel();}
+  setTimeout(()=>{
+    const mpSel=$('rm-mp');if(mpSel){mpSel.value=mid;rmUpdTP();}
+    setTimeout(()=>{
+      const wkSel=$('rm-waktu');if(wkSel)wkSel.value=waktu||'';
+      rmLoad();
+      // Scroll to analisis
+      const wrap=$('rm-analisis-wrap');
+      if(wrap){wrap.scrollIntoView({behavior:'smooth',block:'start'});}
+    },80);
+  },80);
 }
 
 let _rmData={kid:0,mid:0,tid:0,tgl:'',waktu:'',siswaList:[],nilaiList:[],kktp:0};
@@ -2652,10 +3046,11 @@ let _moCrudExtra=null;
 function openMoCrud(type,id,extraHtml){
   _moCrudExtra=extraHtml||null;
   const mo=$('mo-crud');const box=$('mo-crud-box');const head=$('mo-crud-head');const title=$('mo-crud-title');const body=$('mo-crud-body');
-  const L={kelas:'Kelas',guru:'Guru',siswa:'Siswa',mapel:'Mata Pelajaran',tujuan:'Tujuan Pelajaran',koku:'Kokurikuler',induk:'Data Induk',pngm:'Pengumuman','murid-nilai-detail':'Detail Nilai','rm-nilai':'Input Nilai Hasil','gen-soal':'Generate Bank Soal AI'};
-  const colors={kelas:'linear-gradient(135deg,#1565C0,#0D47A1)',guru:'linear-gradient(135deg,#1565C0,#0D47A1)',siswa:'linear-gradient(135deg,#CC2222,#991111)',mapel:'linear-gradient(135deg,#16a34a,#15803d)',tujuan:'linear-gradient(135deg,#7c3aed,#5b21b6)',koku:'linear-gradient(135deg,#0891b2,#0e7490)',induk:'linear-gradient(135deg,#1565C0,#0D47A1)',pngm:'linear-gradient(135deg,#E6A800,#cc9900)','murid-nilai-detail':'linear-gradient(135deg,var(--dark),var(--blue-dark))','rm-nilai':'linear-gradient(135deg,var(--dark),var(--blue-dark))','gen-soal':'linear-gradient(135deg,#7c3aed,#5b21b6)'};
+  const L={kelas:'Kelas',guru:'Guru',siswa:'Siswa',mapel:'Mata Pelajaran',tujuan:'Tujuan Pelajaran',koku:'Kokurikuler',induk:'Data Induk',pngm:'Pengumuman','murid-nilai-detail':'Detail Nilai','rm-nilai':'Input Nilai Hasil','gen-soal':'Generate Bank Soal AI','view-nilai':'Detail Nilai Asesmen (Hanya Lihat)'};
+  const colors={kelas:'linear-gradient(135deg,#1565C0,#0D47A1)',guru:'linear-gradient(135deg,#1565C0,#0D47A1)',siswa:'linear-gradient(135deg,#CC2222,#991111)',mapel:'linear-gradient(135deg,#16a34a,#15803d)',tujuan:'linear-gradient(135deg,#7c3aed,#5b21b6)',koku:'linear-gradient(135deg,#0891b2,#0e7490)',induk:'linear-gradient(135deg,#1565C0,#0D47A1)',pngm:'linear-gradient(135deg,#E6A800,#cc9900)','murid-nilai-detail':'linear-gradient(135deg,var(--dark),var(--blue-dark))','rm-nilai':'linear-gradient(135deg,var(--dark),var(--blue-dark))','gen-soal':'linear-gradient(135deg,#7c3aed,#5b21b6)','view-nilai':'linear-gradient(135deg,#1565C0,#0D47A1)'};
   head.style.background=colors[type]||'linear-gradient(135deg,#1565C0,#0D47A1)';
-  title.textContent=(id?'Edit ':'Tambah ')+L[type];
+  const viewOnly=['view-nilai','murid-nilai-detail'];
+  title.textContent=viewOnly.includes(type)?L[type]:(id?'Edit ':'Tambah ')+L[type];
   if(extraHtml){body.innerHTML=extraHtml;}
   else{body.innerHTML=buildCrudForm(type,id);}
   mo.classList.add('open');
@@ -2902,7 +3297,360 @@ function afterPageRender(id){
   if(id==='remedial'){const k=$('rm-kls');if(k&&k.value)rmUpdMapel();}
 }
 
-// ===================== INIT =====================
+// ===================== ADMIN: MAPEL, TUJUAN, KOKU PAGES =====================
+function buildAdmMapelPage(){
+  const filterKls=$('f-adm-mapel-kls')?+$('f-adm-mapel-kls').value:0;
+  let rows=filterKls?DB.mapel.filter(m=>m.kelasId===filterKls):DB.mapel;
+  const tblRows=rows.map((r,i)=>`<tr><td><b>${r.nama}</b></td><td>${gKelas(r.kelasId).nama||'—'}</td><td>${tblAksi('mapel',r.id)}</td></tr>`).join('');
+  return `
+  <div class="filter-bar">
+    <select id="f-adm-mapel-kls" onchange="goPage('adm-mapel')"><option value="">Semua Kelas</option>${DB.kelas.map(k=>`<option value="${k.id}"${filterKls===k.id?' selected':''}>${k.nama}</option>`).join('')}</select>
+    <span style="font-size:12px;color:var(--gray)">${rows.length} mata pelajaran</span>
+  </div>
+  <div class="toolbar">
+    <button class="btn btn-primary" onclick="openMoCrud('mapel',null)">＋ Tambah</button>
+    <button class="btn btn-green" onclick="openMoImport('mapel')">⬆ Import</button>
+    <button class="btn btn-gray" onclick="exportCSV('mapel')">⬇ Export</button>
+  </div>
+  <div class="tbl-wrap"><table><thead><tr><th>Nama Mapel</th><th>Kelas</th><th>Aksi</th></tr></thead>
+  <tbody>${tblRows||'<tr><td colspan="3" class="tbl-empty">Belum ada data</td></tr>'}</tbody></table></div>`;
+}
+
+function buildAdmTujuanPage(){
+  const filterKls=$('f-adm-tp-kls')?+$('f-adm-tp-kls').value:0;
+  const filterMp=$('f-adm-tp-mp')?+$('f-adm-tp-mp').value:0;
+  let rows=DB.tujuan;
+  if(filterKls)rows=rows.filter(r=>r.kelasId===filterKls);
+  if(filterMp)rows=rows.filter(r=>r.mapelId===filterMp);
+  const tblRows=rows.map((r,i)=>`<tr><td>${gKelas(r.kelasId).nama||'—'}</td><td>${gMapel(r.mapelId).nama||'—'}</td><td style="max-width:200px">${r.tp}</td><td style="text-align:center"><b>${r.kktp}</b></td><td>${tblAksi('tujuan',r.id)}</td></tr>`).join('');
+  return `
+  <div class="filter-bar">
+    <select id="f-adm-tp-kls" onchange="admTpRefresh()"><option value="">Semua Kelas</option>${DB.kelas.map(k=>`<option value="${k.id}"${filterKls===k.id?' selected':''}>${k.nama}</option>`).join('')}</select>
+    <select id="f-adm-tp-mp" onchange="goPage('adm-tujuan')"><option value="">Semua Mapel</option>${DB.mapel.filter(m=>!filterKls||m.kelasId===filterKls).map(m=>`<option value="${m.id}"${filterMp===m.id?' selected':''}>${m.nama}</option>`).join('')}</select>
+    <span style="font-size:12px;color:var(--gray)">${rows.length} TP</span>
+  </div>
+  <div class="toolbar">
+    <button class="btn btn-primary" onclick="openMoCrud('tujuan',null)">＋ Tambah</button>
+    <button class="btn btn-green" onclick="openMoImport('tujuan')">⬆ Import</button>
+    <button class="btn btn-gray" onclick="exportCSV('tujuan')">⬇ Export</button>
+  </div>
+  <div class="tbl-wrap"><table><thead><tr><th>Kelas</th><th>Mapel</th><th>Tujuan Pelajaran</th><th>KKTP</th><th>Aksi</th></tr></thead>
+  <tbody>${tblRows||'<tr><td colspan="5" class="tbl-empty">Belum ada data</td></tr>'}</tbody></table></div>`;
+}
+function admTpRefresh(){
+  const kid=$('f-adm-tp-kls')?+$('f-adm-tp-kls').value:0;
+  const mp=$('f-adm-tp-mp');
+  if(mp){mp.innerHTML='<option value="">Semua Mapel</option>'+DB.mapel.filter(m=>!kid||m.kelasId===kid).map(m=>`<option value="${m.id}">${m.nama}</option>`).join('');}
+  goPage('adm-tujuan');
+}
+
+function buildAdmKokuPage(){
+  const filterKls=$('f-adm-kk-kls')?+$('f-adm-kk-kls').value:0;
+  let rows=filterKls?DB.koku.filter(k=>k.kelasId===filterKls):DB.koku;
+  const tblRows=rows.map((r,i)=>`<tr><td>${gKelas(r.kelasId).nama||'—'}</td><td>${r.tema||'—'}</td><td>${r.judul||'—'}</td><td style="font-size:11px">${r.elemen||'—'}</td><td style="font-size:11px">${r.subElemen||'—'}</td><td>${tblAksi('koku',r.id)}</td></tr>`).join('');
+  return `
+  <div class="filter-bar"><select id="f-adm-kk-kls" onchange="goPage('adm-koku')"><option value="">Semua Kelas</option>${DB.kelas.map(k=>`<option value="${k.id}"${filterKls===k.id?' selected':''}>${k.nama}</option>`).join('')}</select></div>
+  <div class="toolbar">
+    <button class="btn btn-primary" onclick="openKokuMo()">＋ Tambah</button>
+    <button class="btn btn-green" onclick="openMoImport('koku')">⬆ Import</button>
+    <button class="btn btn-gray" onclick="exportCSV('koku')">⬇ Export</button>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Kelas</th><th>Tema</th><th>Judul Kegiatan</th><th>Elemen</th><th>Sub Elemen</th><th>Aksi</th></tr></thead>
+    <tbody>${tblRows||'<tr><td colspan="6" class="tbl-empty">Belum ada data kokurikuler</td></tr>'}</tbody>
+  </table></div>`;
+}
+
+// ===================== CETAK REKAP & PORTO (dedicated pages) =====================
+function buildCetakRekapPage(){
+  const g=DB.guru.find(x=>x.id===STATE.activeGuruId)||{};
+  const myKls=getGuruKelasIds(g);
+  const klsOpts=DB.kelas.filter(k=>myKls.includes(k.id)).map(k=>`<option value="${k.id}">${k.nama}</option>`).join('');
+  return `
+  <div class="hero-section" style="background:linear-gradient(135deg,#0891b2,#0e7490)">
+    <div class="hero-inner"><div class="hero-ico">🖨</div><div class="hero-txt"><h2>Cetak Rekap Nilai</h2><p>Rekapitulasi nilai semua mapel atau per mapel</p></div></div>
+  </div>
+  <div class="cetak-grid">
+    <div class="cetak-card">
+      <div class="cetak-card-head"><div class="cetak-card-ico" style="background:linear-gradient(135deg,var(--blue),var(--blue-dark))">📋</div><div><h3 style="font-weight:800;margin:0 0 3px">Daftar Nilai Per Mapel</h3><p style="font-size:11px;color:var(--gray)">Per kelas dan mata pelajaran</p></div></div>
+      <div class="field"><label>Kelas</label><select id="rk1-kls" onchange="rk1UpdMp()"><option value="">-- Pilih --</option>${klsOpts}</select></div>
+      <div class="field"><label>Mapel</label><select id="rk1-mp"><option value="">-- Pilih --</option></select></div>
+      <div class="cetak-card-actions"><button class="btn btn-info" onclick="pvRptRk1()">👁 Preview</button><button class="btn btn-purple" onclick="ctRptRk1()">🖨 Cetak</button></div>
+    </div>
+    <div class="cetak-card">
+      <div class="cetak-card-head"><div class="cetak-card-ico" style="background:linear-gradient(135deg,#16a34a,#15803d)">📊</div><div><h3 style="font-weight:800;margin:0 0 3px">Rekapitulasi Semua Mapel</h3><p style="font-size:11px;color:var(--gray)">Semua mapel per siswa dalam kelas</p></div></div>
+      <div class="field"><label>Kelas</label><select id="rk2-kls"><option value="">-- Pilih --</option>${klsOpts}</select></div>
+      <div class="cetak-card-actions"><button class="btn btn-info" onclick="pvRk2()">👁 Preview</button><button class="btn btn-purple" onclick="ctRk2()">🖨 Cetak</button></div>
+    </div>
+    <div class="cetak-card">
+      <div class="cetak-card-head"><div class="cetak-card-ico" style="background:linear-gradient(135deg,var(--yellow),var(--yellow-dark))">🏆</div><div><h3 style="font-weight:800;margin:0 0 3px">Peringkat Kelas</h3><p style="font-size:11px;color:var(--gray)">Ranking berdasarkan rata-rata</p></div></div>
+      <div class="field"><label>Kelas</label><select id="rk4-kls"><option value="">-- Pilih --</option>${klsOpts}</select></div>
+      <div class="cetak-card-actions"><button class="btn btn-info" onclick="pvRk4()">👁 Preview</button><button class="btn btn-purple" onclick="ctRk4()">🖨 Cetak</button></div>
+    </div>
+    <div class="cetak-card">
+      <div class="cetak-card-head"><div class="cetak-card-ico" style="background:linear-gradient(135deg,#0891b2,#0e7490)">🌱</div><div><h3 style="font-weight:800;margin:0 0 3px">Nilai Kokurikuler</h3><p style="font-size:11px;color:var(--gray)">Semua elemen & sub elemen</p></div></div>
+      <div class="field"><label>Kelas</label><select id="rk3-kls"><option value="">-- Pilih --</option>${klsOpts}</select></div>
+      <div class="cetak-card-actions"><button class="btn btn-info" onclick="pvRk3()">👁 Preview</button><button class="btn btn-purple" onclick="ctRk3()">🖨 Cetak</button></div>
+    </div>
+  </div>`;
+}
+function rk1UpdMp(){const kid=$('rk1-kls')?.value;const sel=$('rk1-mp');if(!sel)return;sel.innerHTML='<option value="">-- Pilih --</option>'+DB.mapel.filter(m=>m.kelasId===+kid).map(m=>`<option value="${m.id}">${m.nama}</option>`).join('');}
+function pvRptRk1(){
+  const kid=+$('rk1-kls')?.value,mid=+$('rk1-mp')?.value;
+  if(!kid||!mid){toast('Pilih Kelas dan Mapel!','err');return;}
+  // Temporarily sync to r1-kls/r1-mp for bRpt1
+  const dummy1=document.createElement('select');dummy1.id='r1-kls-tmp';
+  const r1kls=$('r1-kls');const r1mp=$('r1-mp');
+  if(r1kls)r1kls.value=kid;if(r1mp)r1mp.value=mid;
+  const orig1=$('r1-kls'),orig2=$('r1-mp');
+  // Just build directly
+  const tp=DB.tujuan.filter(t=>t.kelasId===kid&&t.mapelId===mid);
+  const sw=DB.siswa.filter(s=>s.kelasId===kid);
+  const kN=gKelas(kid).nama,mN=gMapel(mid).nama;
+  const thsTP=tp.map((t,i)=>`<th class="rpt-tp" style="text-align:center;min-width:60px">TP${i+1}<br><small style="font-weight:400">KKTP:${t.kktp}</small></th>`).join('');
+  const rows=sw.map((s,i)=>{
+    const tds=tp.map(t=>{const n=DB.nilaiMapel.filter(x=>x.siswaId===s.id&&(x.tujuanId===t.id||(Array.isArray(x.tujuanIds)&&x.tujuanIds.includes(t.id))));if(!n.length)return'<td class="rpt-tp" style="text-align:center;color:#d1d5db">—</td>';const avg=Math.round(n.reduce((a,b)=>a+b.nilai,0)/n.length);return`<td class="rpt-tp" style="text-align:center;font-weight:600;padding:4px 6px">${avg}<span class="rpt-badge ${avg>=t.kktp?'rb-T':'rb-BT'}" style="margin-left:3px">${avg>=t.kktp?'T':'BT'}</span></td>`;}).join('');
+    const all=DB.nilaiMapel.filter(n=>n.siswaId===s.id&&n.mapelId===mid);
+    const avg=all.length?Math.round(all.reduce((a,b)=>a+b.nilai,0)/all.length):null;
+    return`<tr><td style="text-align:center">${i+1}</td><td style="font-size:8.5pt;color:#64748b">${s.nis}</td><td style="font-weight:600">${s.nama}</td>${tds}<td style="text-align:center;font-weight:900;color:${avg?(avg>=75?'#16a34a':'#cc2222'):'#ccc'}">${avg??'—'}</td></tr>`;
+  }).join('');
+  const html=`${getKop()}<div class="rpt-title">Daftar Nilai Mata Pelajaran</div><div class="rpt-sub">${mN} — ${kN}</div>
+  <div class="rpt-meta"><span><span class="rpt-meta-lbl">Kelas:</span><span class="rpt-meta-val">${kN}</span></span> <span><span class="rpt-meta-lbl">Mapel:</span><span class="rpt-meta-val">${mN}</span></span><span><span class="rpt-meta-lbl">Siswa:</span><span class="rpt-meta-val">${sw.length}</span></span> <span><span class="rpt-meta-lbl">Wali:</span><span class="rpt-meta-val">${gWali(kid).nama}</span></span></div>
+  <table class="rpt-table"><thead><tr><th rowspan="2" style="text-align:center">No</th><th rowspan="2" style="text-align:center">NIS</th><th rowspan="2">Nama Siswa</th><th colspan="${tp.length||1}" style="text-align:center">Capaian TP</th><th rowspan="2" style="text-align:center">Rata-rata</th></tr><tr>${thsTP||'<th style="text-align:center">Nilai</th>'}</tr></thead>
+  <tbody>${rows}</tbody></table>${getTTD(kid)}`;
+  showPreview(html,'Daftar Nilai Mapel');
+}
+function ctRptRk1(){
+  const kid=+$('rk1-kls')?.value,mid=+$('rk1-mp')?.value;
+  if(!kid||!mid){toast('Pilih Kelas dan Mapel!','err');return;}
+  pvRptRk1(); setTimeout(()=>cetakDariPreview(),200);
+}
+function bRpt2Kls(kid){
+  const kN=gKelas(kid).nama,ml=DB.mapel.filter(m=>m.kelasId===kid),sw=DB.siswa.filter(s=>s.kelasId===kid);
+  const ths=ml.map(m=>`<th style="text-align:center">${m.nama}</th>`).join('');
+  const rows=sw.map((s,i)=>{
+    const tds=ml.map(m=>{const n=DB.nilaiMapel.filter(x=>x.siswaId===s.id&&x.mapelId===m.id);return n.length?{td:`<td style="text-align:center;font-weight:600">${Math.round(n.reduce((a,b)=>a+b.nilai,0)/n.length)}</td>`,v:Math.round(n.reduce((a,b)=>a+b.nilai,0)/n.length)}:{td:'<td style="text-align:center;color:#ccc">—</td>',v:null};});
+    const vals=tds.filter(d=>d.v!==null).map(d=>d.v);const tot=vals.length?+(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1):null;
+    return`<tr><td>${i+1}</td><td style="font-size:9pt;color:#64748b">${s.nis}</td><td style="font-weight:600">${s.nama}</td>${tds.map(d=>d.td).join('')}<td style="text-align:center;font-weight:900;color:${tot?(tot>=75?'#16a34a':'#cc2222'):'#ccc'}">${tot??'—'}</td></tr>`;
+  }).join('');
+  return `${getKop()}<div class="rpt-title">Rekapitulasi Nilai Semua Mata Pelajaran</div><div class="rpt-sub">${kN}</div>
+  <table class="rpt-table"><thead><tr><th>No</th><th>NIS</th><th>Nama</th>${ths}<th>Rata-rata</th></tr></thead><tbody>${rows||'<tr><td colspan="'+(ml.length+4)+'" style="text-align:center;color:#ccc;padding:14px">Belum ada data</td></tr>'}</tbody></table>${getTTD(kid)}`;
+}
+function bRpt3Kls(kid){
+  const kN=gKelas(kid).nama,sw=DB.siswa.filter(s=>s.kelasId===kid);
+  const entries=DB.nilaiKoku.filter(n=>n.kelasId===kid);
+  const groups=[...new Map(entries.map(n=>[n.elemen+'|'+n.subElemen,{elemen:n.elemen,subElemen:n.subElemen}])).values()];
+  const KLONG={'MULAI BERKEMBANG':'Mulai Berkembang','BERKEMBANG':'Berkembang','CAKAP':'Cakap','MAHIR':'Mahir'};
+  const secs=groups.map(g=>{
+    const rows=sw.map((s,i)=>{const n=DB.nilaiKoku.find(x=>x.siswaId===s.id&&x.kelasId===kid&&x.elemen===g.elemen&&x.subElemen===g.subElemen);return`<tr><td style="text-align:center">${i+1}</td><td style="color:#555;font-size:8.5pt">${s.nis}</td><td style="font-weight:600">${s.nama}</td><td style="text-align:center;font-weight:700">${n?(KLONG[n.nilai]||n.nilai):'—'}</td></tr>`;}).join('');
+    return`<div style="margin-bottom:16px"><div style="background:#1a3a5c;color:#fff;padding:7px 11px;font-weight:700;font-size:10pt">${g.elemen}</div><div style="background:#f0f4ff;padding:5px 11px;font-size:9pt;color:var(--blue);font-weight:600;border:1px solid #dde8ff">Sub Elemen: ${g.subElemen}</div><table class="rpt-table"><thead><tr><th style="text-align:center">No</th><th>NIS</th><th>Nama</th><th style="text-align:center">Capaian</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }).join('');
+  return `${getKop()}<div class="rpt-title">Daftar Nilai Kokurikuler</div><div class="rpt-sub">${kN}</div>${secs||'<p style="text-align:center;color:#ccc;padding:20px">Belum ada data</p>'}${getTTD(kid)}`;
+}
+function bRpt4Kls(kid){
+  const kN=gKelas(kid).nama,ml=DB.mapel.filter(m=>m.kelasId===kid),sw=DB.siswa.filter(s=>s.kelasId===kid);
+  const ranked=sw.map(s=>{const v=DB.nilaiMapel.filter(n=>n.siswaId===s.id);const avg=v.length?+(v.reduce((a,b)=>a+b.nilai,0)/v.length).toFixed(1):null;return{...s,avg};}).filter(s=>s.avg!==null).sort((a,b)=>b.avg-a.avg);
+  const pr=v=>v>=90?'A - Sangat Baik':v>=75?'B - Baik':v>=60?'C - Cukup':'D - Perlu Bimbingan';
+  const ths=ml.map(m=>`<th style="text-align:center;font-size:8pt">${m.nama}</th>`).join('');
+  const rows=ranked.map((s,i)=>{
+    const tds=ml.map(m=>{const n=DB.nilaiMapel.filter(x=>x.siswaId===s.id&&x.mapelId===m.id);return n.length?`<td style="text-align:center;font-weight:600">${Math.round(n.reduce((a,b)=>a+b.nilai,0)/n.length)}</td>`:`<td style="text-align:center;color:#aaa">—</td>`;}).join('');
+    const medal=i===0?'1 🥇':i===1?'2 🥈':i===2?'3 🥉':(i+1)+'';
+    const bg=i===0?'background:#fef9c3':i===1?'background:#f1f5f9':i===2?'background:#fff7ed':'';
+    return`<tr style="${bg}"><td style="text-align:center;font-weight:900">${medal}</td><td style="font-size:8.5pt;color:#555">${s.nis}</td><td style="font-weight:700">${s.nama}</td>${tds}<td style="text-align:center;font-weight:900;color:${s.avg>=75?'#16a34a':'#cc2222'}">${s.avg}</td><td style="font-size:8.5pt">${pr(s.avg)}</td></tr>`;
+  }).join('');
+  return `${getKop()}<div class="rpt-title">Daftar Peringkat Kelas</div><div class="rpt-sub">${kN}</div>
+  <table class="rpt-table"><thead><tr><th style="text-align:center">Peringkat</th><th>NIS</th><th>Nama</th>${ths}<th style="text-align:center">Rata-rata</th><th>Predikat</th></tr></thead>
+  <tbody>${rows||'<tr><td colspan="'+(ml.length+5)+'" style="text-align:center;color:#ccc;padding:14px">Belum ada data</td></tr>'}</tbody></table>${getTTD(kid)}`;
+}
+
+function buildCetakPortoPage(){
+  const g=DB.guru.find(x=>x.id===STATE.activeGuruId)||{};
+  const myKls=getGuruKelasIds(g);
+  const klsOpts=DB.kelas.filter(k=>myKls.includes(k.id)).map(k=>`<option value="${k.id}">${k.nama}</option>`).join('');
+  return `
+  <div class="hero-section" style="background:linear-gradient(135deg,#7c3aed,#5b21b6)">
+    <div class="hero-inner"><div class="hero-ico">📰</div><div class="hero-txt"><h2>Cetak Portofolio Siswa</h2><p>Laporan akademik lengkap per siswa</p></div></div>
+  </div>
+  <div class="card">
+    <div class="grid2">
+      <div class="field"><label>Kelas</label><select id="pf-kls" onchange="pfUpdSiswa()"><option value="">-- Pilih --</option>${klsOpts}</select></div>
+      <div class="field"><label>Siswa (kosong=semua)</label><select id="pf-sw"><option value="">-- Semua Siswa --</option></select></div>
+      <div class="field"><label>Periode Dari</label><input type="date" id="pf-tgl1"></div>
+      <div class="field"><label>Periode Sampai</label><input type="date" id="pf-tgl2"></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+      <button class="btn btn-info" onclick="pvPorto()">👁 Preview</button>
+      <button class="btn btn-purple" onclick="cetakPortoSiswa()">🖨 Cetak Per Siswa</button>
+      <button class="btn btn-teal" onclick="cetakPortoKelas()">🖨 Cetak Semua</button>
+    </div>
+  </div>`;
+}
+
+// ===================== MURID: REMEDIAL LOG PAGE =====================
+function buildRemedialMurid(){
+  const s=DB.siswa.find(x=>x.id===STATE.activeSiswaId)||{};
+  const kls=gKelas(s.kelasId);
+
+  // Remedial programs this student is part of
+  const myRemedial=DB.programRemedial.filter(p=>Array.isArray(p.siswaIds)&&p.siswaIds.includes(s.id));
+  const myPengayaan=DB.programPengayaan.filter(p=>Array.isArray(p.siswaIds)&&p.siswaIds.includes(s.id));
+
+  // Nilai remedial for this student
+  const myNilaiR=DB.nilaiRemedial.filter(n=>n.siswaId===s.id);
+  const myNilaiP=DB.nilaiPengayaan.filter(n=>n.siswaId===s.id);
+
+  const remRows=myRemedial.map((p,i)=>{
+    const nr=myNilaiR.find(n=>n.programId===p.id);
+    const nilaiHasil=nr?.nilaiHasil;
+    const stColor=p.status==='selesai'?'#16a34a':p.status==='berlangsung'?'var(--yellow)':'var(--blue)';
+    const nc=nilaiHasil!=null?(+nilaiHasil>=(p.kktp||75)?'#16a34a':'var(--red)'):'#aaa';
+    const stLabel=nilaiHasil!=null?(+nilaiHasil>=(p.kktp||75)?'<span class="badge bg-green">Tuntas</span>':'<span class="badge bg-red">Belum Tuntas</span>'):'—';
+    return`<tr style="${i%2?'background:#fff5f5':''}">
+      <td style="font-size:11px;color:var(--gray);white-space:nowrap">${fmtD(p.tglPelaksanaan)}</td>
+      <td style="font-weight:600">${p.namaMapel||'—'}</td>
+      <td style="font-size:11px">${p.metode||'—'}</td>
+      <td style="font-size:11px">${p.materi||'—'}</td>
+      <td style="text-align:center"><span style="background:${stColor};color:#fff;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700">${p.status==='selesai'?'Selesai':p.status==='berlangsung'?'Berjalan':'Terjadwal'}</span></td>
+      <td style="text-align:center;font-weight:900;font-size:15px;color:${nc}">${nilaiHasil??'—'}</td>
+      <td style="text-align:center">${stLabel}</td>
+    </tr>`;
+  }).join('');
+
+  const pengRows=myPengayaan.map((p,i)=>{
+    const np=myNilaiP.find(n=>n.programId===p.id);
+    const hasilStr=np?.hasil||'—';
+    const stColor=p.status==='selesai'?'#16a34a':p.status==='berlangsung'?'var(--yellow)':'var(--blue)';
+    return`<tr style="${i%2?'background:#f0fdf4':''}">
+      <td style="font-size:11px;color:var(--gray);white-space:nowrap">${fmtD(p.tglPelaksanaan)}</td>
+      <td style="font-weight:600">${p.namaMapel||'—'}</td>
+      <td style="font-size:11px">${p.bentuk||'—'}</td>
+      <td style="font-size:11px">${p.deskripsi||'—'}</td>
+      <td style="text-align:center"><span style="background:${stColor};color:#fff;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700">${p.status==='selesai'?'Selesai':p.status==='berlangsung'?'Berjalan':'Terjadwal'}</span></td>
+      <td style="text-align:center;font-weight:700;color:${hasilStr==='Sangat Baik'?'#16a34a':'var(--blue)'}">${hasilStr}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+  <div class="hero-section" style="background:linear-gradient(135deg,var(--dark),#7c3aed)">
+    <div class="hero-inner"><div class="hero-ico">📋</div><div class="hero-txt"><h2>Log Remedial & Pengayaan</h2><p>${s.nama||'—'} • ${kls.nama||'—'}</p></div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title" style="color:var(--red)">🔴 Program Remedial Saya (${myRemedial.length})</div>
+    ${myRemedial.length?`<div class="tbl-wrap"><table>
+      <thead><tr><th>Tanggal</th><th>Mapel</th><th>Metode</th><th>Materi</th><th>Status</th><th style="text-align:center">Nilai Remedial</th><th style="text-align:center">Keterangan</th></tr></thead>
+      <tbody>${remRows}</tbody>
+    </table></div>`:'<div style="text-align:center;color:var(--gray);padding:20px">Belum ada program remedial</div>'}
+  </div>
+
+  <div class="card">
+    <div class="card-title" style="color:#16a34a">🌟 Program Pengayaan Saya (${myPengayaan.length})</div>
+    ${myPengayaan.length?`<div class="tbl-wrap"><table>
+      <thead><tr><th>Tanggal</th><th>Mapel</th><th>Bentuk</th><th>Deskripsi</th><th>Status</th><th style="text-align:center">Hasil</th></tr></thead>
+      <tbody>${pengRows}</tbody>
+    </table></div>`:'<div style="text-align:center;color:var(--gray);padding:20px">Belum ada program pengayaan</div>'}
+  </div>`;
+}
+
+
+// ===================== FIX 4: Daftar Nilai setelah Remedial/Pengayaan =====================
+function lihatDaftarNilaiRM(jenis,id){
+  const prog=jenis==='remedial'?DB.programRemedial.find(p=>p.id===+id):DB.programPengayaan.find(p=>p.id===+id);
+  if(!prog){toast('Program tidak ditemukan!','err');return;}
+  const arr=jenis==='remedial'?DB.nilaiRemedial:DB.nilaiPengayaan;
+  const rows=(prog.siswaData||[]).map((s,i)=>{
+    const n=arr.find(x=>x.programId===prog.id&&x.siswaId===s.id);
+    if(jenis==='remedial'){
+      const nh=n?.nilaiHasil;
+      const nc=nh!=null?(+nh>=(prog.kktp||75)?'#16a34a':'var(--red)'):'#aaa';
+      const st=nh!=null?(+nh>=(prog.kktp||75)?'<span class="badge bg-green">Tuntas</span>':'<span class="badge bg-red">Belum Tuntas</span>'):'<span style="color:#aaa">—</span>';
+      return`<tr style="${i%2?'background:#fff5f5':''}"><td>${i+1}</td><td style="font-size:11px;color:var(--gray)">${s.nis}</td><td style="font-weight:700">${s.nama}</td><td style="text-align:center;color:var(--red);font-weight:700">${s.nilaiAwal??'—'}</td><td style="text-align:center;font-weight:900;font-size:15px;color:${nc}">${nh??'—'}</td><td style="text-align:center">${st}</td><td style="font-size:11px">${n?.keterangan||''}</td></tr>`;
+    }else{
+      const hs=n?.hasil||'—';
+      return`<tr style="${i%2?'background:#f0fdf4':''}"><td>${i+1}</td><td style="font-size:11px;color:var(--gray)">${s.nis}</td><td style="font-weight:700">${s.nama}</td><td style="text-align:center;color:#16a34a;font-weight:700">${s.nilaiAwal??'—'}</td><td style="text-align:center;font-weight:700;color:${hs==='Sangat Baik'?'#16a34a':'var(--blue)'}">${hs}</td><td style="font-size:11px">${n?.keterangan||''}</td></tr>`;
+    }
+  }).join('');
+  const theads=jenis==='remedial'
+    ?'<th>No</th><th>NIS</th><th>Nama Siswa</th><th style="text-align:center">Nilai Awal</th><th style="text-align:center">Nilai Remedial</th><th style="text-align:center">Status</th><th>Keterangan</th>'
+    :'<th>No</th><th>NIS</th><th>Nama Siswa</th><th style="text-align:center">Nilai Awal</th><th style="text-align:center">Hasil Pengayaan</th><th>Keterangan</th>';
+  openMoCrud('view-nilai',null,`
+    <div style="background:linear-gradient(135deg,${jenis==='remedial'?'var(--red),#991111':'#16a34a,#15803d'});border-radius:12px;padding:14px 18px;margin-bottom:14px">
+      <div style="color:#fff;font-weight:800;font-size:15px">${jenis==='remedial'?'📋':'🌟'} Daftar Nilai ${jenis==='remedial'?'Remedial':'Pengayaan'}</div>
+      <div style="color:rgba(255,255,255,.7);font-size:12px;margin-top:4px">${prog.namaMapel||'—'} — ${prog.namaKelas||'—'} • ${fmtD(prog.tglPelaksanaan)}</div>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr>${theads}</tr></thead>
+      <tbody>${rows||'<tr><td colspan="7" class="tbl-empty">Belum ada nilai</td></tr>'}</tbody>
+    </table></div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="btn btn-purple" onclick="cetakDaftarRM('${jenis}',${id})">🖨 Cetak</button>
+      <button class="btn btn-gray" onclick="closeMoCrud()">Tutup</button>
+    </div>
+  `);
+}
+function cetakDaftarRM(jenis,id){
+  const prog=jenis==='remedial'?DB.programRemedial.find(p=>p.id===+id):DB.programPengayaan.find(p=>p.id===+id);
+  if(!prog)return;
+  const arr=jenis==='remedial'?DB.nilaiRemedial:DB.nilaiPengayaan;
+  const rows=(prog.siswaData||[]).map((s,i)=>{
+    const n=arr.find(x=>x.programId===prog.id&&x.siswaId===s.id);
+    if(jenis==='remedial'){const nh=n?.nilaiHasil;const st=nh!=null?(+nh>=(prog.kktp||75)?'Tuntas':'Belum Tuntas'):'—';return`<tr style="${i%2?'background:#f0f4ff':''}"><td style="text-align:center">${i+1}</td><td style="font-size:8.5pt;color:#64748b">${s.nis}</td><td style="font-weight:700">${s.nama}</td><td style="text-align:center;color:#cc2222;font-weight:700">${s.nilaiAwal??'—'}</td><td style="text-align:center;font-weight:900;color:${+nh>=(prog.kktp||75)?'#16a34a':'#cc2222'}">${nh??'—'}</td><td style="text-align:center">${st}</td><td style="font-size:8pt">${n?.keterangan||''}</td></tr>`;}
+    else{const hs=n?.hasil||'—';return`<tr style="${i%2?'background:#f0fdf4':''}"><td style="text-align:center">${i+1}</td><td style="font-size:8.5pt;color:#555">${s.nis}</td><td style="font-weight:700">${s.nama}</td><td style="text-align:center;color:#16a34a;font-weight:700">${s.nilaiAwal??'—'}</td><td style="text-align:center;font-weight:700">${hs}</td><td style="font-size:8pt">${n?.keterangan||''}</td></tr>`;}
+  }).join('');
+  const theads=jenis==='remedial'
+    ?'<th>No</th><th>NIS</th><th>Nama</th><th style="text-align:center">Nilai Awal</th><th style="text-align:center">Nilai Remedial</th><th style="text-align:center">Status</th><th>Ket</th>'
+    :'<th>No</th><th>NIS</th><th>Nama</th><th style="text-align:center">Nilai Awal</th><th style="text-align:center">Hasil</th><th>Ket</th>';
+  const html=`${getKop()}<div class="rpt-title">${jenis==='remedial'?'DAFTAR NILAI REMEDIAL':'DAFTAR NILAI PENGAYAAN'}</div><div class="rpt-sub">${prog.namaMapel} — ${prog.namaKelas}</div>
+  <div class="rpt-meta"><span><span class="rpt-meta-lbl">${jenis==='remedial'?'Metode':'Bentuk'}:</span><span class="rpt-meta-val">${jenis==='remedial'?prog.metode:prog.bentuk}</span></span><span><span class="rpt-meta-lbl">Tgl:</span><span class="rpt-meta-val">${fmtD(prog.tglPelaksanaan)}</span></span>${jenis==='remedial'?`<span><span class="rpt-meta-lbl">KKTP:</span><span class="rpt-meta-val">${prog.kktp}</span></span>`:''}</div>
+  <table class="rpt-table"><thead><tr>${theads}</tr></thead><tbody>${rows}</tbody></table>${getTTD(prog.kelasId)}`;
+  openPrint(html);
+}
+
+// ===================== FIX 5: Murid Cetak Portofolio =====================
+// Updated getMuridPage with porto-murid
+function getMuridPage(id) {
+  if(id==='dashboard') return buildMuridDash();
+  if(id==='nilai-murid') return buildNilaiMurid();
+  if(id==='remedial-murid') return buildRemedialMurid();
+  if(id==='porto-murid') return buildPortoMurid();
+  return '<div class="card">Halaman tidak ditemukan</div>';
+}
+
+function buildPortoMurid(){
+  const s=DB.siswa.find(x=>x.id===STATE.activeSiswaId)||{};
+  const kls=gKelas(s.kelasId);
+  const mapelOpts=DB.mapel.filter(m=>m.kelasId===s.kelasId).map(m=>`<option value="${m.id}">${m.nama}</option>`).join('');
+  return `
+  <div class="hero-section" style="background:linear-gradient(135deg,#7c3aed,#5b21b6)">
+    <div class="hero-inner"><div class="hero-ico">📰</div><div class="hero-txt"><h2>Portofolio Saya</h2><p>${s.nama||'—'} • ${kls.nama||'—'}</p></div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">🔍 Filter Portofolio</div>
+    <div class="grid2">
+      <div class="field"><label>Dari Tanggal</label><input type="date" id="pm-tgl1"></div>
+      <div class="field"><label>Sampai Tanggal</label><input type="date" id="pm-tgl2"></div>
+      <div class="field" style="grid-column:1/-1"><label>Mata Pelajaran (kosong = semua)</label>
+        <select id="pm-mp" style="width:100%;border:2px solid var(--border);border-radius:10px;padding:9px 12px;font-size:13px;outline:none">
+          <option value="">-- Semua Mata Pelajaran --</option>${mapelOpts}
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+      <button class="btn btn-info" onclick="pvPortoMurid()">👁 Preview</button>
+      <button class="btn btn-purple" onclick="cetakPortoMurid()">🖨 Cetak</button>
+    </div>
+  </div>`;
+}
+function _bPortoMurid(){
+  const s=DB.siswa.find(x=>x.id===STATE.activeSiswaId)||{};
+  const tgl1=$('pm-tgl1')?.value||'';
+  const tgl2=$('pm-tgl2')?.value||'';
+  const filterMp=+$('pm-mp')?.value||0;
+  return bPF(s,tgl1,tgl2,filterMp);
+}
+function pvPortoMurid(){const h=_bPortoMurid();if(h)showPreview(h,'Portofolio');}
+function cetakPortoMurid(){const h=_bPortoMurid();if(h)openPrint(h);}
+
 document.addEventListener('DOMContentLoaded',function(){
   // set logos
   const logos=document.querySelectorAll('#landing-logo,#header-logo');logos.forEach(el=>el.src=LOGO_SRC);
