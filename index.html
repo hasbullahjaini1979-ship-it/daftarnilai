@@ -805,7 +805,7 @@ let STATE = {
 };
 
 // ===================== GS_URL DEFAULT =====================
-const GS_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbxHCvUfjj6PsU8U_Gvk6Cy3RtbnfeDT4pQJiz2GmnZFrJtwDIEAxdxjwF3010liMEZg/exec';
+const GS_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbzUn-_5TRgUBtXLJ8krDLDv34Tkc2kcJLJpSW70Gue6EeAmkYa9EiOrMPL7IPyBC0ZI/exec';
 
 // ===================== HELPERS =====================
 const $ = id => document.getElementById(id);
@@ -952,6 +952,8 @@ async function gsReq(body) {
 }
 async function syncToGS() {
   if(!DB.kokuProjek)DB.kokuProjek=[];
+  // Always backup kokuProjek to localStorage
+  try{localStorage.setItem('sdn1_kokuProjek',JSON.stringify(DB.kokuProjek));}catch(e){}
   await gsReq({action:'saveAll',payload:{
     sekolah:DB.sekolah,kelas:DB.kelas,guru:DB.guru,siswa:DB.siswa,
     mapel:DB.mapel,tujuan:DB.tujuan,koku:DB.koku,kokuProjek:DB.kokuProjek,
@@ -984,6 +986,11 @@ function applyGsData(r) {
       else DB[k]=r[k];
     }
   });
+  // kokuProjek: restore from localStorage if GS doesn't have it
+  if(!r.kokuProjek||!r.kokuProjek.length){
+    try{const lk=localStorage.getItem('sdn1_kokuProjek');if(lk)DB.kokuProjek=JSON.parse(lk);}catch(e){}
+  }
+  if(!DB.kokuProjek)DB.kokuProjek=[];
   renderCurrentPage();
   updateTicker();
   updateHeaderInfo();
@@ -1043,6 +1050,7 @@ function doLogin() {
     const stored = localStorage.getItem('sdn1_admin_hash')||btoa('sdn1raja2025');
     if(btoa(pass)!==stored){ errEl.textContent='❌ Sandi salah!'; return; }
     STATE.role='admin'; STATE.userId='admin'; STATE.userName=DB.sekolah.kepala||'Administrator';
+    try{localStorage.setItem('sdn1_session',JSON.stringify({role:'admin',userId:'admin',userName:STATE.userName}));}catch(e){}
     closeLogin(); initAppShell();
   } else if(_loginRole==='guru') {
     const gid = +$('login-guru-sel').value;
@@ -1053,6 +1061,7 @@ function doLogin() {
     const inputHash = btoa(pass);
     if(inputHash!==storedPass && pass!==(g.nip||'guru123') && pass!=='guru123'){ errEl.textContent='❌ Sandi salah!'; return; }
     STATE.role='guru'; STATE.userId=gid; STATE.userName=g.nama; STATE.activeGuruId=gid;
+    try{localStorage.setItem('sdn1_session',JSON.stringify({role:'guru',userId:gid,userName:g.nama,activeGuruId:gid}));}catch(e){}
     closeLogin(); initAppShell();
   } else { // murid
     const nis = pass;
@@ -1061,6 +1070,7 @@ function doLogin() {
     const storedPass = s.sandi||btoa(s.nis);
     if(btoa(pass)!==storedPass && pass.toString()!==s.nis.toString()){ errEl.textContent='❌ Sandi salah!'; return; }
     STATE.role='murid'; STATE.userId=s.id; STATE.userName=s.nama; STATE.activeSiswaId=s.id;
+    try{localStorage.setItem('sdn1_session',JSON.stringify({role:'murid',userId:s.id,userName:s.nama,activeSiswaId:s.id}));}catch(e){}
     closeLogin(); initAppShell();
   }
 }
@@ -1068,6 +1078,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Enter'&&$('mo-login').clas
 function doLogout() {
   if(!confirm('Keluar dari aplikasi?')) return;
   STATE.role=null; STATE.userId=null;
+  try{localStorage.removeItem('sdn1_session');}catch(e){}
   $('app-shell').classList.remove('visible');
   $('landing-page').style.display='flex';
 }
@@ -1251,12 +1262,18 @@ function buildSettingsPage() {
   <div class="card">
     <div class="card-title">📗 Hubungkan Google Sheets</div>
     <div style="background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px;line-height:1.7">
-      <b>Langkah:</b><ol style="padding-left:18px;margin-top:6px">
-      <li>Buat spreadsheet Google Sheets baru</li>
-      <li>Buka Extensions → Apps Script</li>
-      <li>Paste kode google_apps_script.js</li>
-      <li>Deploy → Web App → Anyone</li>
-      <li>Copy URL deployment, paste di bawah</li></ol>
+      <b>Langkah setup / update GAS script:</b><ol style="padding-left:18px;margin-top:6px">
+      <li>Buat spreadsheet Google Sheets baru (atau buka yang lama)</li>
+      <li>Klik <b>Extensions → Apps Script</b></li>
+      <li><b>Hapus semua kode lama</b>, lalu paste kode dari file <code>google_apps_script_sdn1raja_v5.js</code></li>
+      <li>Klik <b>Deploy → New Deployment</b> (buat deployment baru, bukan edit yang lama)</li>
+      <li>Type: <b>Web App</b> | Execute as: <b>Me</b> | Access: <b>Anyone</b></li>
+      <li>Klik Deploy → copy URL-nya</li>
+      <li>Paste URL di kolom di bawah → klik Simpan & Hubungkan</li>
+      <li>Klik <b>⚡ Inisialisasi Sheet</b> untuk membuat sheet-sheet yang diperlukan</li></ol>
+      <div style="background:#fef9c3;border:1px solid #fde68a;border-radius:7px;padding:8px;margin-top:8px;font-size:12px;color:#92400e">
+        ⚠️ <b>Penting:</b> Jika sudah punya GAS sebelumnya, <b>wajib update</b> ke script baru agar data kokuProjek, programRemedial, dan programPengayaan tersimpan dengan benar.
+      </div>
     </div>
     <div class="field"><label>URL Google Apps Script</label><input id="gs-url-inp" value="${STATE.gsUrl||''}" placeholder="https://script.google.com/macros/s/.../exec"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1696,6 +1713,7 @@ async function simpanKokuProjek(projId){
     DB.koku.push({id:gId(DB.koku),kelasId:kid,tema,judul,elemen:e.elemen,subElemen:sub});
   }));
   toast('✅ Projek disimpan!','ok');
+  try{localStorage.setItem('sdn1_kokuProjek',JSON.stringify(DB.kokuProjek));}catch(e){}
   if(STATE.gsOk)await syncToGS();
   goPage('koku-data');
 }
@@ -1704,6 +1722,7 @@ async function hapusKokuProjek(id){
   if(!confirm('Hapus projek ini beserta semua elemennya?'))return;
   DB.kokuProjek=(DB.kokuProjek||[]).filter(p=>p.id!==+id);
   toast('Projek dihapus','ok');
+  try{localStorage.setItem('sdn1_kokuProjek',JSON.stringify(DB.kokuProjek));}catch(e){}
   if(STATE.gsOk)await syncToGS();
   goPage('koku-data');
 }
@@ -3088,7 +3107,9 @@ function buildCrudForm(type,id){
     const jenis=rec.jenisGuru||'wali';
     const klsIds=rec.kelasIds||[];const mpIds=rec.mapelIds||[];
     const klsChks=DB.kelas.map(k=>{const ck=klsIds.includes(k.id);return`<label style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px 4px 6px;border:2px solid ${ck?'var(--blue)':'var(--border)'};border-radius:20px;cursor:pointer;font-size:11px;font-weight:${ck?'700':'500'};background:${ck?'#dbeafe':'#fff'};color:${ck?'#1d4ed8':'#475569'};margin:3px;transition:all .15s"><input type="checkbox" id="mf-kls-${k.id}" value="${k.id}" ${ck?'checked':''} style="display:none" onchange="guruKlsChg()"><span style="width:14px;height:14px;border-radius:50%;border:2px solid ${ck?'var(--blue)':'#cbd5e1'};background:${ck?'var(--blue)':'#fff'};display:inline-flex;align-items:center;justify-content:center;font-size:8px;color:#fff">${ck?'✓':''}</span>${k.nama}</label>`;}).join('');
-    const mpChks=DB.mapel.map(m=>{const ck=mpIds.includes(m.id);return`<label style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px 4px 6px;border:2px solid ${ck?'#16a34a':'var(--border)'};border-radius:20px;cursor:pointer;font-size:11px;font-weight:${ck?'700':'500'};background:${ck?'#dcfce7':'#fff'};color:${ck?'#15803d':'#475569'};margin:3px;transition:all .15s"><input type="checkbox" id="mf-mp-${m.id}" value="${m.id}" ${ck?'checked':''} style="display:none"><span style="width:14px;height:14px;border-radius:50%;border:2px solid ${ck?'#16a34a':'#cbd5e1'};background:${ck?'#16a34a':'#fff'};display:inline-flex;align-items:center;justify-content:center;font-size:8px;color:#fff">${ck?'✓':''}</span>${m.nama}<span style="font-size:9px;color:#94a3b8;margin-left:3px">(${gKelas(m.kelasId).nama||'?'})</span></label>`;}).join('');
+    // Mapel filtered by selected kelas only — rendered dynamically via guruKlsChg
+    const selKlsIds=klsIds.length?klsIds:DB.kelas.map(k=>k.id);
+    const mpChks=DB.mapel.filter(m=>selKlsIds.includes(m.kelasId)).map(m=>{const ck=mpIds.includes(m.id);const klsNama=gKelas(m.kelasId).nama||'?';return`<label onclick="guruMpToggle(this,${m.id})" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px 4px 6px;border:2px solid ${ck?'#16a34a':'var(--border)'};border-radius:20px;cursor:pointer;font-size:11px;font-weight:${ck?'700':'500'};background:${ck?'#dcfce7':'#fff'};color:${ck?'#15803d':'#475569'};margin:3px;transition:all .15s" id="mf-mplbl-${m.id}"><input type="checkbox" id="mf-mp-${m.id}" value="${m.id}" ${ck?'checked':''} style="display:none"><span id="mf-mpdot-${m.id}" style="width:14px;height:14px;border-radius:50%;border:2px solid ${ck?'#16a34a':'#cbd5e1'};background:${ck?'#16a34a':'#fff'};display:inline-flex;align-items:center;justify-content:center;font-size:8px;color:#fff;flex-shrink:0">${ck?'✓':''}</span>${m.nama}<span style="font-size:9px;color:#94a3b8;margin-left:3px">(${klsNama})</span></label>`;}).join('');
     return`${F('Nama Guru','nama',rec.nama)}${F('NIP','nip',rec.nip)}${F('Tugas/Jabatan','tugas',rec.tugas,'text','Wali Kelas / Guru Mapel')}
     <div class="field"><label>Jenis Guru</label><div style="display:flex;gap:10px">
       <label style="display:flex;align-items:center;gap:7px;padding:8px 14px;border:2px solid var(--border);border-radius:9px;cursor:pointer;background:${jenis==='wali'?'#dbeafe':'#fff'}"><input type="radio" name="mf-jenis" value="wali" ${jenis==='wali'?'checked':''} onchange="guruJenisChg()"> 👤 Wali Kelas</label>
@@ -3098,8 +3119,8 @@ function buildCrudForm(type,id){
       <div class="field"><label>Kelas yang Diwali</label><select id="mf-kelasId"><option value="0">-- Pilih --</option>${DB.kelas.map(k=>`<option value="${k.id}"${+rec.kelasId===k.id?' selected':''}>${k.nama}</option>`).join('')}</select></div>
     </div>
     <div id="mf-mapel-sec" style="display:${jenis==='mapel'?'block':'none'}">
-      <div class="field"><label>Kelas yang Diajar</label><div style="display:flex;flex-wrap:wrap">${klsChks}</div></div>
-      <div class="field"><label>Mata Pelajaran yang Diajar</label><div style="display:flex;flex-wrap:wrap">${mpChks}</div></div>
+      <div class="field"><label>Kelas yang Diajar</label><div style="display:flex;flex-wrap:wrap" id="mf-kls-wrap">${klsChks}</div></div>
+      <div class="field"><label>Mata Pelajaran yang Diajar <span style="font-weight:400;color:var(--gray);font-size:10px">(sesuai kelas dipilih)</span></label><div style="display:flex;flex-wrap:wrap;gap:0" id="mf-mp-wrap">${mpChks}</div></div>
     </div>
     ${F('Sandi (opsional)','sandi','','text','Kosong = pakai NIP')}
     ${foot}`;
@@ -3131,8 +3152,41 @@ function buildCrudForm(type,id){
 
 function crudTujuanMp(){const kid=$('mf-kelasId')?.value;const sel=$('mf-mapelId');if(sel)sel.innerHTML='<option value="">-- Pilih --</option>'+DB.mapel.filter(m=>!kid||m.kelasId===+kid).map(m=>`<option value="${m.id}">${m.nama}</option>`).join('');}
 function kokuChgElem(){const e=$('mf-elemen')?.value||'';const sel=$('mf-subElemen');if(sel)sel.innerHTML='<option value="">-- Pilih --</option>'+(KOKU_DATA[e]||[]).map(s=>`<option value="${s}">${s}</option>`).join('');}
-function guruJenisChg(){const v=document.querySelector('input[name="mf-jenis"]:checked')?.value||'wali';const ws=$('mf-wali-sec'),ms=$('mf-mapel-sec');if(ws)ws.style.display=v==='wali'?'block':'none';if(ms)ms.style.display=v==='mapel'?'block':'none';}
-function guruKlsChg(){DB.kelas.forEach(k=>{const cb=$('mf-kls-'+k.id);if(!cb)return;const lbl=cb.closest('label');const dot=lbl?.querySelector('span');const ck=cb.checked;if(lbl){lbl.style.border='2px solid '+(ck?'var(--blue)':'var(--border)');lbl.style.background=ck?'#dbeafe':'#fff';lbl.style.color=ck?'#1d4ed8':'#475569';lbl.style.fontWeight=ck?'700':'500';}if(dot){dot.style.border='2px solid '+(ck?'var(--blue)':'#cbd5e1');dot.style.background=ck?'var(--blue)':'#fff';dot.textContent=ck?'✓':'';}});}
+function guruJenisChg(){
+  const v=document.querySelector('input[name="mf-jenis"]:checked')?.value||'wali';
+  const ws=$('mf-wali-sec'),ms=$('mf-mapel-sec');
+  if(ws)ws.style.display=v==='wali'?'block':'none';
+  if(ms)ms.style.display=v==='mapel'?'block':'none';
+}
+function guruKlsChg(){
+  // Update kelas chip styles
+  DB.kelas.forEach(k=>{
+    const cb=$('mf-kls-'+k.id);if(!cb)return;
+    const lbl=cb.closest('label');const dot=lbl?.querySelector('span');const ck=cb.checked;
+    if(lbl){lbl.style.border='2px solid '+(ck?'var(--blue)':'var(--border)');lbl.style.background=ck?'#dbeafe':'#fff';lbl.style.color=ck?'#1d4ed8':'#475569';lbl.style.fontWeight=ck?'700':'500';}
+    if(dot){dot.style.border='2px solid '+(ck?'var(--blue)':'#cbd5e1');dot.style.background=ck?'var(--blue)':'#fff';dot.textContent=ck?'✓':'';}
+  });
+  // Refresh mapel list based on currently checked kelas
+  const selKlsIds=DB.kelas.filter(k=>$('mf-kls-'+k.id)?.checked).map(k=>k.id);
+  const mpWrap=$('mf-mp-wrap');if(!mpWrap)return;
+  // Preserve already-checked mapel ids
+  const prevChecked=DB.mapel.filter(m=>{const cb=$('mf-mp-'+m.id);return cb&&cb.checked;}).map(m=>m.id);
+  const filteredMapel=selKlsIds.length?DB.mapel.filter(m=>selKlsIds.includes(m.kelasId)):DB.mapel;
+  mpWrap.innerHTML=filteredMapel.map(m=>{
+    const ck=prevChecked.includes(m.id);
+    const klsNama=gKelas(m.kelasId).nama||'?';
+    return`<label onclick="guruMpToggle(this,${m.id})" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px 4px 6px;border:2px solid ${ck?'#16a34a':'var(--border)'};border-radius:20px;cursor:pointer;font-size:11px;font-weight:${ck?'700':'500'};background:${ck?'#dcfce7':'#fff'};color:${ck?'#15803d':'#475569'};margin:3px;transition:all .15s" id="mf-mplbl-${m.id}"><input type="checkbox" id="mf-mp-${m.id}" value="${m.id}" ${ck?'checked':''} style="display:none"><span id="mf-mpdot-${m.id}" style="width:14px;height:14px;border-radius:50%;border:2px solid ${ck?'#16a34a':'#cbd5e1'};background:${ck?'#16a34a':'#fff'};display:inline-flex;align-items:center;justify-content:center;font-size:8px;color:#fff;flex-shrink:0">${ck?'✓':''}</span>${m.nama}<span style="font-size:9px;color:#94a3b8;margin-left:3px">(${klsNama})</span></label>`;
+  }).join('');
+  if(!filteredMapel.length)mpWrap.innerHTML='<div style="color:#94a3b8;font-size:12px;font-style:italic;padding:4px">Pilih kelas terlebih dahulu</div>';
+}
+function guruMpToggle(lbl,mid){
+  const cb=$('mf-mp-'+mid);if(!cb)return;
+  cb.checked=!cb.checked;
+  const ck=cb.checked;
+  const dot=$('mf-mpdot-'+mid);
+  if(lbl){lbl.style.border='2px solid '+(ck?'#16a34a':'var(--border)');lbl.style.background=ck?'#dcfce7':'#fff';lbl.style.color=ck?'#15803d':'#475569';lbl.style.fontWeight=ck?'700':'500';}
+  if(dot){dot.style.border='2px solid '+(ck?'#16a34a':'#cbd5e1');dot.style.background=ck?'#16a34a':'#fff';dot.textContent=ck?'✓':'';}
+}
 function previewLogo(e){const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=ev=>{$('mf-logo').value=ev.target.result;const p=$('mf-logo-preview');if(p)p.innerHTML=`<img src="${ev.target.result}" style="width:100%;height:100%;object-fit:contain">`;};reader.readAsDataURL(file);}
 function clearLogo(){$('mf-logo').value='';const p=$('mf-logo-preview');if(p)p.innerHTML='<span style="font-size:24px">🏫</span>';}
 
@@ -3656,10 +3710,63 @@ document.addEventListener('DOMContentLoaded',function(){
   const logos=document.querySelectorAll('#landing-logo,#header-logo');logos.forEach(el=>el.src=LOGO_SRC);
   // init state from localStorage
   STATE.gsUrl=localStorage.getItem('sdn1_gs_url')||GS_URL_DEFAULT;
-  // Load data if URL exists
+  // Restore kokuProjek from localStorage
+  try{const lk=localStorage.getItem('sdn1_kokuProjek');if(lk)DB.kokuProjek=JSON.parse(lk);}catch(e){}
+  // Try to restore session
+  let restoredSession=false;
+  try{
+    const sess=localStorage.getItem('sdn1_session');
+    if(sess){
+      const s=JSON.parse(sess);
+      if(s&&s.role){
+        STATE.role=s.role;STATE.userId=s.userId;STATE.userName=s.userName||'';
+        if(s.activeGuruId)STATE.activeGuruId=s.activeGuruId;
+        if(s.activeSiswaId)STATE.activeSiswaId=s.activeSiswaId;
+        restoredSession=true;
+      }
+    }
+  }catch(e){}
+
+  // If session found, show loading overlay on landing page while GS loads
+  const lp=$('landing-page');
+  let _loadingOverlay=null;
+  if(restoredSession&&lp){
+    _loadingOverlay=document.createElement('div');
+    _loadingOverlay.style.cssText='position:absolute;inset:0;z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(5,15,30,0.85);backdrop-filter:blur(4px)';
+    _loadingOverlay.innerHTML='<div class="spinner" style="width:44px;height:44px;border:4px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite"></div><div style="color:#fff;font-size:13px;font-weight:700">Memulihkan sesi...</div>';
+    lp.style.position='relative';
+    lp.appendChild(_loadingOverlay);
+  }
+  function removeOverlay(){if(_loadingOverlay&&_loadingOverlay.parentNode)_loadingOverlay.parentNode.removeChild(_loadingOverlay);}
+
+  // Load data from GS
   if(STATE.gsUrl){
-    // silently try to preload for login page
-    gsJsonp('loadAll').then(r=>{applyGsData(r);}).catch(()=>{});
+    gsJsonp('loadAll').then(r=>{
+      applyGsData(r);
+      removeOverlay();
+      // After data loaded, validate restored session
+      if(restoredSession&&STATE.role){
+        let valid=false;
+        if(STATE.role==='admin')valid=true;
+        else if(STATE.role==='guru')valid=DB.guru.some(g=>g.id===STATE.activeGuruId);
+        else if(STATE.role==='murid')valid=DB.siswa.some(s=>s.id===STATE.activeSiswaId);
+        if(valid){
+          initAppShell();
+        }else{
+          localStorage.removeItem('sdn1_session');
+          STATE.role=null;
+        }
+      }
+    }).catch(()=>{
+      removeOverlay();
+      // GS failed — still try to restore session with local data
+      if(restoredSession&&STATE.role){
+        initAppShell();
+      }
+    });
+  } else if(restoredSession&&STATE.role){
+    removeOverlay();
+    initAppShell();
   }
 });
 
