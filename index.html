@@ -2062,6 +2062,21 @@ function _buildDNLog(myKls){
   </table></div>`;
 }
 
+function showTPInfo(el,tpText){
+  const existing=document.getElementById('tp-popup');
+  if(existing)existing.remove();
+  const popup=document.createElement('div');
+  popup.id='tp-popup';
+  popup.style.cssText='position:fixed;z-index:9999;background:#1a3a5c;color:#fff;padding:12px 16px;border-radius:10px;max-width:320px;font-size:13px;line-height:1.5;box-shadow:0 8px 30px rgba(0,0,0,0.35);pointer-events:auto';
+  popup.innerHTML=`<div style="font-size:10px;font-weight:700;color:rgba(255,255,255,.6);margin-bottom:5px;letter-spacing:.5px">TUJUAN PEMBELAJARAN</div><div style="font-weight:600">${tpText}</div><div style="text-align:right;margin-top:8px"><button onclick="document.getElementById('tp-popup').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:3px 10px;border-radius:6px;cursor:pointer;font-size:11px">✕ Tutup</button></div>`;
+  document.body.appendChild(popup);
+  const rect=el.getBoundingClientRect();
+  let top=rect.bottom+6,left=rect.left;
+  if(left+330>window.innerWidth)left=window.innerWidth-335;
+  if(top+120>window.innerHeight)top=rect.top-125;
+  popup.style.top=top+'px';popup.style.left=left+'px';
+  setTimeout(()=>document.addEventListener('click',function h(e){if(!popup.contains(e.target)&&e.target!==el){popup.remove();document.removeEventListener('click',h);}},{once:true}),100);
+}
 function dnLihatNilai(rawKey){
   const key=rawKey.replace(/__PIPE__/g,'|');
   const parts=key.split('|');
@@ -2071,7 +2086,7 @@ function dnLihatNilai(rawKey){
   const kls=gKelas(kid),mp=gMapel(mid);
   const sw=DB.siswa.filter(s=>s.kelasId===kid);
   const tpList=tids.length?tids.map(tid=>gTujuan(tid)):DB.tujuan.filter(t=>t.kelasId===kid&&t.mapelId===mid);
-  const colHdr=tpList.map((t,i)=>`<th style="text-align:center;font-size:11px">TP${i+1}<br><small style="opacity:.8">KKTP:${t.kktp||75}</small></th>`).join('');
+  const colHdr=tpList.map((t,i)=>`<th style="text-align:center;font-size:11px;cursor:pointer" title="${t.tp}" onclick="showTPInfo(this,'${t.tp.replace(/'/g,"\\'")}')">TP${i+1}<br><small style="opacity:.8">KKTP:${t.kktp||75}</small></th>`).join('');
   const rows=sw.map((s,i)=>{
     const cells=tpList.map(t=>{
       const n=DB.nilaiMapel.find(x=>x.siswaId===s.id&&x.mapelId===mid&&x.tgl===tgl&&(x.tujuanId===t.id||(Array.isArray(x.tujuanIds)&&x.tujuanIds.includes(t.id))));
@@ -2113,7 +2128,7 @@ function dnLoad(){
   const tglSet=[...new Set(nr.map(n=>n.tgl))].sort();
   const tpList=DB.tujuan.filter(t=>t.kelasId===kid&&t.mapelId===mid);
   const cols=[];
-  if(tpList.length){tpList.forEach(t=>{(fTgl?[fTgl]:tglSet).forEach(tgl=>{if(nr.some(n=>getTid(n)===t.id&&n.tgl===tgl))cols.push({tujuanId:t.id,tgl,label:`${t.tp.length>14?t.tp.slice(0,14)+'…':t.tp}<br><small>${fmtD(tgl)}</small>`,kktp:t.kktp});});});}
+  if(tpList.length){tpList.forEach(t=>{(fTgl?[fTgl]:tglSet).forEach(tgl=>{if(nr.some(n=>getTid(n)===t.id&&n.tgl===tgl))cols.push({tujuanId:t.id,tgl,label:`${t.tp.length>14?t.tp.slice(0,14)+'…':t.tp}<br><small>${fmtD(tgl)}</small>`,kktp:t.kktp,tpFull:t.tp});});});}
   else{(fTgl?[fTgl]:tglSet).forEach(tgl=>cols.push({tujuanId:null,tgl,label:`Penilaian<br><small>${fmtD(tgl)}</small>`,kktp:75}));}
   if(!cols.length){$('dn-wrap').style.display='none';$('dn-empty').style.display='block';return;}
   const rows=sw.map((s,i)=>{
@@ -2126,7 +2141,7 @@ function dnLoad(){
     const avg=allV.length?Math.round(allV.reduce((a,b)=>a+b,0)/allV.length):null;
     return`<tr style="${i%2?'background:#f8faff':''}"><td>${i+1}</td><td style="font-size:11px;color:var(--gray)">${s.nis}</td><td style="font-weight:600">${s.nama}</td>${tds}<td style="text-align:center;font-weight:900;color:${avg?(avg>=75?'#16a34a':'var(--red)'):'#ccc'}" id="dn-avg-${s.id}">${avg??'—'}</td></tr>`;
   }).join('');
-  $('tbl-dn').innerHTML=`<thead><tr><th>No</th><th>NIS</th><th>Nama Siswa</th>${cols.map(c=>`<th style="text-align:center;min-width:90px">${c.label}</th>`).join('')}<th>Rata-rata</th></tr></thead><tbody>${rows}</tbody>`;
+  $('tbl-dn').innerHTML=`<thead><tr><th>No</th><th>NIS</th><th>Nama Siswa</th>${cols.map(c=>c.tpFull?`<th style="text-align:center;min-width:90px;cursor:pointer" title="${c.tpFull}" onclick="showTPInfo(this,'${c.tpFull.replace(/'/g,"\\'")}')">${c.label}</th>`:`<th style="text-align:center;min-width:90px">${c.label}</th>`).join('')}<th>Rata-rata</th></tr></thead><tbody>${rows}</tbody>`;
   $('dn-wrap').style.display='block';$('dn-empty').style.display='none';
 }
 async function dnSimpan(){
