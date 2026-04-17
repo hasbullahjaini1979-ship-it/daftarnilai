@@ -568,13 +568,13 @@ a{text-decoration:none;color:inherit}
 
 /* TP CHIPS */
 .tp-chip{
-  display:inline-flex;align-items:center;gap:6px;padding:5px 12px 5px 8px;
-  border:2px solid var(--border);border-radius:20px;cursor:pointer;
-  font-size:11px;font-weight:500;background:#fff;color:#475569;
-  transition:all 0.15s;white-space:nowrap;
+  display:flex;align-items:flex-start;gap:8px;padding:8px 12px;
+  border:2px solid var(--border);border-radius:10px;cursor:pointer;
+  font-size:12px;font-weight:500;background:#fff;color:#475569;
+  transition:all 0.15s;white-space:normal;width:100%;line-height:1.5;
 }
 .tp-chip.selected{border-color:var(--blue);background:#dbeafe;color:#1d4ed8;font-weight:700}
-.tp-chip-dot{width:16px;height:16px;border-radius:50%;border:2px solid #cbd5e1;background:#fff;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-size:9px;color:#fff;transition:all 0.15s}
+.tp-chip-dot{width:18px;height:18px;border-radius:50%;border:2px solid #cbd5e1;background:#fff;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-size:9px;color:#fff;transition:all 0.15s;margin-top:1px}
 .tp-chip.selected .tp-chip-dot{border-color:var(--blue);background:var(--blue)}
 
 /* CETAK GRID */
@@ -1745,7 +1745,7 @@ function buildInputNilaiPage(){
     </div>
     <div class="field" style="grid-column:1/-1">
       <label>Tujuan Pelajaran</label>
-      <div id="nm-tp-wrap" style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:10px;min-height:44px;display:flex;flex-wrap:wrap;gap:7px">
+      <div id="nm-tp-wrap" style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:10px;min-height:44px;display:flex;flex-direction:column;gap:6px">
         <span style="color:#94a3b8;font-size:12px;font-style:italic">Pilih kelas dan mata pelajaran</span>
       </div>
     </div>
@@ -1775,10 +1775,10 @@ function nmUpdTP(){
   const rows=(kid&&mid)?DB.tujuan.filter(t=>t.kelasId===+kid&&t.mapelId===+mid):[];
   const wrap=$('nm-tp-wrap');if(!wrap)return;
   if(!rows.length){wrap.innerHTML='<span style="color:#94a3b8;font-size:12px;font-style:italic">Belum ada TP untuk mapel ini</span>';return;}
-  wrap.innerHTML=rows.map(t=>`<label class="tp-chip" id="nm-tpc-${t.id}" onclick="nmTogTP(this,${t.id})">
+  wrap.innerHTML=rows.map((t,i)=>`<label class="tp-chip" id="nm-tpc-${t.id}" onclick="nmTogTP(this,${t.id})">
     <input type="checkbox" id="nm-cb-${t.id}" value="${t.id}" style="display:none">
     <span class="tp-chip-dot" id="nm-dot-${t.id}"></span>
-    ${t.tp.slice(0,40)+(t.tp.length>40?'…':'')} <span style="font-size:10px;color:#94a3b8">(KKTP:${t.kktp})</span>
+    <span style="flex:1"><span style="font-size:10px;color:#94a3b8;font-weight:700;margin-right:4px">TP${i+1}</span>${t.tp} <span style="font-size:10px;color:#94a3b8;white-space:nowrap">(KKTP:${t.kktp})</span></span>
   </label>`).join('');
 }
 function nmTogTP(lbl,tid){
